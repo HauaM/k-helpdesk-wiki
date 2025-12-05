@@ -1,0 +1,6 @@
+- Python 스타일: Black(라인 100), Ruff 기본, mypy strict 지향. Python 3.10+, async-first.
+- 아키텍처/레이어: API(FastAPI) → routers → services(비즈니스, FastAPI 비의존) → repositories(RDB/vector) → models(SQLAlchemy)/schemas(Pydantic). vectorstore/llm/queue/mcp 각각 추상+구현. 서비스는 FastAPI 타입 사용 지양, 의존성 주입은 라우터에서.
+- 네이밍: snake_case 함수/모듈, PascalCase 클래스/스키마/서비스, UPPER_SNAKE 상수.
+- 코드 위치: prompts/config는 app/llm, vector 로직 app/vectorstore; 레이어 경계 넘는 import 피하기.
+- 테스트: pytest + pytest-asyncio, tests/ 아래 test_*.py, Test* 클래스. async 테스트에 @pytest.mark.asyncio.
+- 기타: 비밀키 .env에만; mock vector/LLM이 기본. 환각 방지 컨텍스트 포함 주의.

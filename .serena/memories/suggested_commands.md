@@ -1,0 +1,7 @@
+- 설치: `uv sync` (runtime), `uv sync --all-groups` (dev 포함); `.env.example`를 `.env`로 복사 후 설정.
+- API 실행: `uv run python main.py` 또는 `uv run uvicorn app.api.main:app --reload`.
+- MCP 서버: `uv run python mcp_server.py` (stdio).
+- 마이그레이션: `uv run alembic revision --autogenerate -m "msg"`; 적용 `uv run alembic upgrade head`.
+- 테스트: `uv run pytest`; 커버리지 `uv run pytest --cov=app tests/`.
+- 포맷/린트/타입체크: `uv run black app/ tests/ --check`; `uv run ruff check app/ tests/`; `uv run mypy app/`.
+- 초기 데이터/설정: 필요 시 `init_db.py` 참고 (수동 실행 시 `uv run python init_db.py`).

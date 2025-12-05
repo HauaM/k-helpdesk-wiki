@@ -5,7 +5,7 @@ ERD 요약:
 """
 
 import enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import Enum as SQLEnum, Float, ForeignKey, String, Text
@@ -63,7 +63,7 @@ class ManualReviewTask(BaseModel):
     review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    old_entry: Mapped["ManualEntry" | None] = relationship(
+    old_entry: Mapped[Optional["ManualEntry"]] = relationship(
         "ManualEntry",
         back_populates="review_tasks_as_old",
         foreign_keys=[old_entry_id],

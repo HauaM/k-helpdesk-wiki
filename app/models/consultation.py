@@ -5,7 +5,7 @@ ERD 요약:
 - Consultation 1 - 1 ConsultationVectorIndex
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, Text
@@ -53,7 +53,7 @@ class Consultation(BaseModel):
         comment="승인된 메뉴얼 항목 연결 (옵션)",
     )
 
-    manual_entry: Mapped["ManualEntry" | None] = relationship(
+    manual_entry: Mapped[Optional["ManualEntry"]] = relationship(
         "ManualEntry",
         back_populates="consultation_reference",
         foreign_keys=[manual_entry_id],
@@ -64,7 +64,7 @@ class Consultation(BaseModel):
         back_populates="source_consultation",
         foreign_keys="ManualEntry.source_consultation_id",
     )
-    vector_index: Mapped["ConsultationVectorIndex" | None] = relationship(
+    vector_index: Mapped[Optional["ConsultationVectorIndex"]] = relationship(
         "ConsultationVectorIndex",
         back_populates="consultation",
         uselist=False,

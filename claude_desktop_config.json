@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "khw": {
+      "command": "python",
+      "args": [
+        "/home/hauam/workspace/k-helpdesk-wiki/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/home/hauam/workspace/k-helpdesk-wiki"
+      }
+    }
+  }
+}

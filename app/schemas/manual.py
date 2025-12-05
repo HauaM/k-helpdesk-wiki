@@ -3,6 +3,7 @@ Manual Schemas
 Pydantic models for Manual API requests/responses
 """
 
+from datetime import datetime
 from uuid import UUID
 from pydantic import Field
 
@@ -103,6 +104,10 @@ class ManualReviewTaskResponse(BaseResponseSchema):
     status: TaskStatus
     reviewer_id: UUID | None
     review_notes: str | None
+    old_manual_summary: str | None = Field(default=None, description="기존 메뉴얼 요약")
+    new_manual_summary: str | None = Field(default=None, description="신규 초안 요약")
+    diff_text: str | None = Field(default=None, description="LLM 비교 결과 요약")
+    diff_json: dict | None = Field(default=None, description="LLM 비교 결과 JSON")
 
     # TODO: Optionally include full manual entries for comparison
     # old_entry: ManualEntryResponse | None
@@ -116,6 +121,7 @@ class ManualReviewApproval(BaseSchema):
     RFP Reference: POST /tasks/manual-review/{id}/approve
     """
 
+    reviewer_id: UUID
     review_notes: str | None = None
     create_new_version: bool = Field(
         default=True, description="Create new manual version"
@@ -130,3 +136,38 @@ class ManualReviewRejection(BaseSchema):
     """
 
     review_notes: str = Field(min_length=10, description="Reason for rejection")
+
+
+class ManualDraftCreateFromConsultationRequest(BaseSchema):
+    """FR-2: 상담을 기반으로 메뉴얼 초안을 생성하기 위한 요청."""
+
+    consultation_id: UUID
+    enforce_hallucination_check: bool = Field(
+        default=True,
+        description="환각 검증 실패 시 리뷰 태스크 생성 여부",
+    )
+
+
+class ManualDraftResponse(BaseResponseSchema):
+    """FR-2: 생성된 메뉴얼 초안 반환."""
+
+    status: ManualStatus
+    keywords: list[str]
+    topic: str
+    background: str
+    guideline: str
+    source_consultation_id: UUID
+
+
+class ManualApproveRequest(BaseSchema):
+    """FR-4: 메뉴얼 승인 요청."""
+
+    approver_id: UUID
+    notes: str | None = Field(default=None, description="승인 메모")
+
+
+class ManualVersionInfo(BaseSchema):
+    """FR-5: 전체 문서 세트 버전 정보."""
+
+    version: str
+    approved_at: datetime

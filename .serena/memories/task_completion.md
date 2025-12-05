@@ -1,0 +1,4 @@
+- 작업 후 기본 검증: `uv run ruff check app/ tests/`; `uv run black app/ tests/ --check`; `uv run mypy app/`; `uv run pytest` (필요 시 `--cov=app tests/`).
+- 기능/데이터 변경 시: alembic 마이그레이션 생성/적용 포함, .env 변경 사항 공유.
+- API/MCP 영향 시: README/Docs 업데이트, 샘플 페이로드나 스크린샷/예시 응답 제공.
+- 커밋: Conventional Commits (예: feat:, fix:). 관련 테스트/마이그레이션 같은 커밋에 포함.

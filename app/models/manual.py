@@ -8,7 +8,7 @@ ERD 요약:
 
 import enum
 from uuid import UUID
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Enum as SQLEnum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -72,13 +72,13 @@ class ManualEntry(BaseModel):
         back_populates="manual_drafts",
         foreign_keys=[source_consultation_id],
     )
-    consultation_reference: Mapped["Consultation" | None] = relationship(
+    consultation_reference: Mapped[Optional["Consultation"]] = relationship(
         "Consultation",
         back_populates="manual_entry",
         foreign_keys="Consultation.manual_entry_id",
         uselist=False,
     )
-    version: Mapped["ManualVersion | None"] = relationship(
+    version: Mapped[Optional["ManualVersion"]] = relationship(
         "ManualVersion", back_populates="entries"
     )
     review_tasks_as_old: Mapped[list["ManualReviewTask"]] = relationship(
@@ -91,7 +91,7 @@ class ManualEntry(BaseModel):
         back_populates="new_entry",
         foreign_keys="ManualReviewTask.new_entry_id",
     )
-    vector_index: Mapped["ManualVectorIndex | None"] = relationship(
+    vector_index: Mapped[Optional["ManualVectorIndex"]] = relationship(
         "ManualVectorIndex",
         back_populates="manual_entry",
         uselist=False,

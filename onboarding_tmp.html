@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>onboarding.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="%F0%9F%8E%93-k-help-desk-wiki-khw-%EC%8B%A0%EC%9E%85-%EC%98%A8%EB%B3%B4%EB%94%A9-%EA%B0%80%EC%9D%B4%EB%93%9C">🎓 K Help Desk Wiki (KHW) 신입 온보딩 가이드</h1>
+<p><strong>Welcome! 👋 이 문서는 K Help Desk Wiki 프로젝트를 처음 접하는 개발자를 위한 완벽한 가이드입니다.</strong></p>
+<hr>
+<h2 id="%F0%9F%93%96-%EB%AA%A9%EC%B0%A8">📖 목차</h2>
+<ul>
+<li><a href="#-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%EC%86%8C%EA%B0%9C">프로젝트 소개</a></li>
+<li><a href="#-%ED%95%B5%EC%8B%AC-%EA%B0%9C%EB%85%90">핵심 개념</a></li>
+<li><a href="#-%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98-%EA%B0%9C%EC%9A%94">아키텍처 개요</a></li>
+<li><a href="#-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%EA%B5%AC%EC%A1%B0">프로젝트 구조</a></li>
+<li><a href="#-%EC%A3%BC%EC%9A%94-%EA%B8%B0%EB%8A%A5-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">주요 기능 워크플로우</a></li>
+<li><a href="#-%EA%B0%9C%EB%B0%9C-%ED%99%98%EA%B2%BD-%EC%84%A4%EC%A0%95">개발 환경 설정</a></li>
+<li><a href="#-%EC%A3%BC%EC%9A%94-%EA%B0%9C%EB%B0%9C-%EB%AA%85%EB%A0%B9%EC%96%B4">주요 개발 명령어</a></li>
+<li><a href="#-%EB%A1%9C%EC%BB%AC-%EA%B0%9C%EB%B0%9C-%EC%8B%9C%EC%9E%91%ED%95%98%EA%B8%B0">로컬 개발 시작하기</a></li>
+<li><a href="#-%EC%BD%94%EB%93%9C-%EC%9E%91%EC%84%B1-%EC%8B%9C-%EC%A4%91%EC%9A%94%ED%95%9C-%EA%B7%9C%EC%B9%99">코드 작성 시 중요한 규칙</a></li>
+<li><a href="#-%EC%9E%90%EC%A3%BC-%EB%AC%BB%EB%8A%94-%EC%A7%88%EB%AC%B8-faq">자주 묻는 질문 (FAQ)</a></li>
+</ul>
+<hr>
+<h2 id="%F0%9F%8E%AF-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%EC%86%8C%EA%B0%9C">🎯 프로젝트 소개</h2>
+<h3 id="khw-k-help-desk-wiki%EB%9E%80">KHW (K Help Desk Wiki)란?</h3>
+<p>KHW는 <strong>고객 지원 상담 기록을 기반으로 자동으로 매뉴얼을 생성하고 관리하는 지식 관리 시스템</strong>입니다.</p>
+<h4 id="%ED%95%B5%EC%8B%AC-%EA%B0%80%EC%B9%98">핵심 가치</h4>
+<ul>
+<li>📞 <strong>상담 이력 자동 수집</strong>: 고객 상담 내용을 구조화된 형식으로 저장</li>
+<li>🤖 <strong>AI 기반 매뉴얼 생성</strong>: LLM을 활용해 상담 내용에서 매뉴얼 초안 자동 생성</li>
+<li>🔍 <strong>스마트 검색</strong>: 벡터 기반 의미론적 검색으로 유사 상담 및 매뉴얼 찾기</li>
+<li>✅ <strong>품질 관리</strong>: 매뉴얼 검토 및 승인 워크플로우로 신뢰할 수 있는 콘텐츠 관리</li>
+</ul>
+<h4 id="%EA%B8%B0%EC%88%A0-%EC%8A%A4%ED%83%9D">기술 스택</h4>
+<pre class="hljs"><code><div>Frontend: (별도 프로젝트)
+Backend: Python 3.10+ + FastAPI (비동기)
+Database: PostgreSQL (RDB) + VectorStore (검색 인덱스)
+AI/ML: LLM (OpenAI/Anthropic), Embedding, Vector Search
+Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%92%A1-%ED%95%B5%EC%8B%AC-%EA%B0%9C%EB%85%90">💡 핵심 개념</h2>
+<h3 id="1-%EC%83%81%EB%8B%B4-consultation">1. <strong>상담 (Consultation)</strong></h3>
+<ul>
+<li>고객과의 상담 내용을 저장하는 기본 단위</li>
+<li>포함 정보: 요약, 문의 내용, 취한 조치, 메타데이터 (지점, 업무구분, 에러코드 등)</li>
+</ul>
+<h3 id="2-%EB%A7%A4%EB%89%B4%EC%96%BC-manual-entry">2. <strong>매뉴얼 (Manual Entry)</strong></h3>
+<ul>
+<li>상담을 기반으로 생성된 <strong>구조화된 지식</strong></li>
+<li>상태: <strong>DRAFT</strong> (초안) → <strong>APPROVED</strong> (승인) → <strong>DEPRECATED</strong> (폐지)</li>
+<li>구성요소:
+<ul>
+<li><strong>키워드</strong>: 1-3개의 핵심 검색어</li>
+<li><strong>주제 (Topic)</strong>: 한 문장 제목</li>
+<li><strong>배경 (Background)</strong>: 문제 상황 설명</li>
+<li><strong>가이드라인 (Guideline)</strong>: 해결 방법</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-%EB%B2%A1%ED%84%B0-%EA%B2%80%EC%83%89-vector-search">3. <strong>벡터 검색 (Vector Search)</strong></h3>
+<ul>
+<li>텍스트를 <strong>숫자 벡터</strong>로 변환하여 의미론적 유사성으로 검색</li>
+<li>예: &quot;카드 결제 오류&quot;와 &quot;신용카드 결제 실패&quot;를 <strong>같은 의미</strong>로 인식</li>
+<li>저장소: RDB (원본 데이터) + VectorStore (검색 인덱스)</li>
+</ul>
+<h3 id="4-%ED%99%98%EA%B0%81-%EB%B0%A9%EC%A7%80-hallucination-prevention">4. <strong>환각 방지 (Hallucination Prevention)</strong></h3>
+<ul>
+<li>LLM이 <strong>원문에 없는 정보를 만들지 않도록</strong> 검증</li>
+<li>예: 매뉴얼의 모든 키워드와 문구가 원본 상담 텍스트에 존재하는지 확인</li>
+</ul>
+<h3 id="5-%EA%B2%80%ED%86%A0-%ED%83%9C%EC%8A%A4%ED%81%AC-review-task">5. <strong>검토 태스크 (Review Task)</strong></h3>
+<ul>
+<li>신규 매뉴얼과 기존 매뉴얼의 <strong>충돌 감지</strong></li>
+<li>상담자가 승인/반려하는 <strong>워크플로우</strong> 관리</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%8F%97%EF%B8%8F-%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98-%EA%B0%9C%EC%9A%94">🏗️ 아키텍처 개요</h2>
+<h3 id="%EB%A0%88%EC%9D%B4%EC%96%B4%EB%93%9C-%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98-layered-architecture">레이어드 아키텍처 (Layered Architecture)</h3>
+<pre class="hljs"><code><div>┌─────────────────────────────────────┐
+│     🌐 API Layer (FastAPI)          │  HTTP 요청 처리
+│  /api/v1/consultations              │
+│  /api/v1/manuals                    │
+│  /api/v1/tasks                      │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│   💼 Service Layer (비즈니스 로직)    │  순수 Python 코드
+│  - ConsultationService              │  FastAPI 의존성 ❌
+│  - ManualService                    │  테스트 가능 ✅
+│  - TaskService                      │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│  📦 Repository Layer (데이터 접근)   │  RDB CRUD 작업
+│  - ConsultationRepository           │
+│  - ManualRepository                 │
+│  - TaskRepository                   │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│   🗄️ Data Layer                      │
+│  - PostgreSQL (원본 데이터)           │
+│  - VectorStore (검색 인덱스)         │
+│  - LLM (AI 모델)                    │
+└─────────────────────────────────────┘
+</div></code></pre>
+<h3 id="%EC%A4%91%EC%9A%94%ED%95%9C-%EC%84%A4%EA%B3%84-%EC%9B%90%EC%B9%99">중요한 설계 원칙</h3>
+<h4 id="%E2%9C%85-service-layer%EB%8A%94-fastapi-independent">✅ Service Layer는 FastAPI-Independent</h4>
+<pre class="hljs"><code><div><span class="hljs-comment"># ✅ 올바른 방식</span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsultationService</span>:</span>
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create_consultation</span><span class="hljs-params">(self, data: ConsultationCreate)</span> -&gt; ConsultationResponse:</span>
+        <span class="hljs-comment"># Pydantic 모델, 순수 Python 타입만 사용</span>
+        <span class="hljs-keyword">return</span> ConsultationResponse(...)
+</div></code></pre>
+<pre class="hljs"><code><div><span class="hljs-comment"># ❌ 잘못된 방식</span>
+<span class="hljs-keyword">from</span> fastapi <span class="hljs-keyword">import</span> HTTPException
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsultationService</span>:</span>
+    <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create</span><span class="hljs-params">(...)</span> -&gt; HTTPException:</span>  <span class="hljs-comment"># 이러지 마세요!</span>
+        ...
+</div></code></pre>
+<p><strong>왜?</strong> 같은 서비스를 FastAPI API와 MCP(Claude) 서버에서 재사용하기 위함</p>
+<hr>
+<h2 id="%F0%9F%93%82-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%EA%B5%AC%EC%A1%B0">📂 프로젝트 구조</h2>
+<pre class="hljs"><code><div>k-helpdesk-wiki/
+├── app/
+│   ├── api/
+│   │   └── main.py                 # FastAPI 앱 생성
+│   ├── routers/                    # 📍 API 엔드포인트
+│   │   ├── consultations.py        # POST /consultations, GET /consultations/search
+│   │   ├── manuals.py              # POST /manuals/draft, GET /manuals/search
+│   │   ├── tasks.py                # POST /tasks/{id}/approve, POST /tasks/{id}/reject
+│   │   └── auth.py                 # 인증 관련
+│   ├── services/                   # 💼 비즈니스 로직 (핵심!)
+│   │   ├── consultation_service.py # 상담 등록, 검색 로직
+│   │   ├── manual_service.py       # 매뉴얼 생성, 검토, 승인 로직
+│   │   ├── task_service.py         # 검토 태스크 승인/반려
+│   │   ├── validation.py           # 환각 방지 검증
+│   │   └── rerank.py               # 검색 결과 재순위화
+│   ├── repositories/               # 📦 데이터 접근 레이어
+│   │   ├── consultation_repository.py
+│   │   ├── manual_rdb.py
+│   │   ├── task_repository.py
+│   │   └── base.py                 # 기본 CRUD 메서드
+│   ├── models/                     # 🗄️ SQLAlchemy 도메인 모델
+│   │   ├── consultation.py         # Consultation 테이블
+│   │   ├── manual.py               # ManualEntry, ManualVersion 테이블
+│   │   ├── task.py                 # ManualReviewTask 테이블
+│   │   └── base.py                 # BaseModel (공통 필드)
+│   ├── schemas/                    # 📊 Pydantic 요청/응답 모델
+│   │   ├── consultation.py
+│   │   ├── manual.py
+│   │   └── user.py
+│   ├── vectorstore/                # 🔍 벡터 검색 추상화
+│   │   ├── protocol.py             # VectorStoreProtocol (인터페이스)
+│   │   ├── mock.py                 # Mock 구현 (개발용)
+│   │   ├── base.py                 # 기본 VectorStore 구현
+│   │   └── factory.py              # VectorStore 생성 팩토리
+│   ├── llm/                        # 🤖 LLM 클라이언트 추상화
+│   │   ├── protocol.py             # LLMClientProtocol (인터페이스)
+│   │   ├── mock.py                 # Mock 구현 (개발용)
+│   │   ├── prompts/                # LLM 프롬프트
+│   │   │   ├── manual_draft.py
+│   │   │   └── manual_compare.py
+│   │   └── factory.py              # LLM 클라이언트 생성 팩토리
+│   ├── queue/                      # 📨 비동기 작업 큐
+│   │   ├── protocol.py
+│   │   ├── inmemory.py
+│   │   └── mock.py
+│   ├── core/                       # ⚙️ 핵심 유틸리티
+│   │   ├── config.py               # 환경 설정 (매우 중요!)
+│   │   ├── db.py                   # 데이터베이스 초기화
+│   │   ├── exceptions.py           # 커스텀 예외
+│   │   ├── logging.py              # 로깅
+│   │   ├── security.py             # JWT, 보안
+│   │   └── dependencies.py         # FastAPI 의존성 주입
+│   ├── mcp/                        # 🔗 MCP 서버 (Claude 통합)
+│   │   ├── server.py               # MCP 서버 메인
+│   │   └── tools.py                # Claude가 사용할 도구들
+│   └── __init__.py
+├── main.py                         # FastAPI 실행 진입점
+├── mcp_server.py                   # MCP 서버 실행 진입점
+├── .env.example                    # 환경 변수 템플릿 (복사해서 .env 만들기)
+├── pyproject.toml                  # 프로젝트 메타데이터, 의존성
+├── alembic/                        # 🗄️ 데이터베이스 마이그레이션
+├── tests/                          # 🧪 테스트
+│   ├── unit/                       # 단위 테스트 (Service 테스트)
+│   └── integration/                # 통합 테스트
+└── docs/                           # 📚 문서
+    ├── KHW_RFP.md                  # 전체 요구사항 정의서
+    └── MCP_SETUP.md                # MCP 서버 설정 가이드
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%93%8A-%EC%A3%BC%EC%9A%94-%EA%B8%B0%EB%8A%A5-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">📊 주요 기능 워크플로우</h2>
+<p>이 섹션에서는 실제 사용자 상호작용 흐름을 <strong>시퀀스 다이어그램</strong>으로 설명합니다.</p>
+<h3 id="1%EF%B8%8F%E2%83%A3-%EC%83%81%EB%8B%B4-%EB%93%B1%EB%A1%9D-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">1️⃣ 상담 등록 워크플로우</h3>
+<p>사용자가 새로운 상담 내용을 시스템에 등록하는 과정입니다.</p>
+<pre><code class="language-mermaid"><div class="mermaid">sequenceDiagram
+    actor User as 상담사
+    participant API as API<br/>/consultations
+    participant Service as ConsultationService<br/>(비즈니스 로직)
+    participant Repo as ConsultationRepository<br/>(데이터 접근)
+    participant DB as PostgreSQL<br/>(RDB)
+    participant Vector as VectorStore<br/>(검색 인덱스)
+    participant Queue as RetryQueue<br/>(재시도 큐)
+
+    User->>API: POST /consultations<br/>{branch_code, inquiry_text, ...}
+    API->>Service: create_consultation(data)
+
+    Service->>Repo: create_consultation(data)
+    Repo->>DB: INSERT INTO consultations<br/>값 저장 및 commit
+    DB-->>Repo: id 반환
+    Repo-->>Service: Consultation 객체
+
+    Service->>Service: _build_embedding_text()<br/>벡터화할 텍스트 생성
+    Service->>Vector: index_document(id, text, metadata)<br/>벡터 인덱싱 시도
+
+    alt 벡터 인덱싱 성공 ✅
+        Vector-->>Service: success
+        Service-->>API: ConsultationResponse
+        API-->>User: 201 Created
+    else 벡터 인덱싱 실패 ❌
+        Vector-->>Service: error
+        Service->>Queue: enqueue(VectorIndexJob)<br/>재시도 작업 등록
+        Queue-->>Service: job_id
+        Service-->>API: ConsultationResponse<br/>(RDB 저장됨, 벡터 미인덱스)
+        API-->>User: 201 Created
+        Note over Service,Queue: 백그라운드에서 재시도
+    end
+</div></code></pre>
+<p><strong>중요 포인트:</strong></p>
+<ul>
+<li>RDB에 저장하고 <strong>나서</strong> 벡터 인덱싱을 시도</li>
+<li>벡터 인덱싱 실패해도 <strong>RDB 데이터는 안전</strong></li>
+<li>실패 시 재시도 큐에 등록하여 나중에 재시도</li>
+</ul>
+<hr>
+<h3 id="2%EF%B8%8F%E2%83%A3-%EC%83%81%EB%8B%B4-%EA%B2%80%EC%83%89-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">2️⃣ 상담 검색 워크플로우</h3>
+<p>사용자가 &quot;카드 결제 오류&quot;처럼 자연어로 검색했을 때의 과정입니다.</p>
+<pre><code class="language-mermaid"><div class="mermaid">sequenceDiagram
+    actor User as 사용자
+    participant API as API<br/>/consultations/search
+    participant Service as ConsultationService
+    participant Vector as VectorStore
+    participant Repo as ConsultationRepository<br/>(메타필터 적용)
+    participant Rerank as RerankerService<br/>(결과 재순위화)
+
+    User->>API: GET /consultations/search<br/>?query=카드 결제 오류<br/>&branch_code=001
+    API->>Service: search_consultations(request)
+
+    Service->>Service: _build_metadata_filter()<br/>branch_code, business_type 등 필터 생성
+
+    Service->>Vector: search(query, top_k=10,<br/>metadata_filter={...})
+    Note over Vector: 의미론적 유사성으로<br/>상위 10개 선택
+    Vector-->>Service: [VectorResult1, VectorResult2, ...]
+
+    Service->>Repo: search_by_ids(id_list, filters)<br/>메타필터로 추가 필터링
+    Repo->>Repo: WHERE business_type=? AND error_code=?
+    Repo-->>Service: [Consultation1, Consultation2, ...]
+
+    Service->>Rerank: rerank_results(results,<br/>domain_weight, recency_weight)
+    Note over Rerank: 벡터 점수 + 도메인 가중치<br/>+ 최신도 가중치<br/>를 조합해 순위 조정
+    Rerank-->>Service: [RerankedResult1, ...]
+
+    Service-->>API: [ConsultationSearchResult]
+    API-->>User: 200 OK<br/>결과 목록 반환
+
+    Note over Service,Rerank: 검색 시간 측정 (NFR-1)<br/>latency 메트릭 기록
+</div></code></pre>
+<p><strong>검색 알고리즘의 3 단계:</strong></p>
+<ol>
+<li><strong>VectorStore 검색</strong>: 의미론적 유사성으로 후보 선택</li>
+<li><strong>메타데이터 필터링</strong>: 지점, 업무구분, 에러코드로 추가 필터</li>
+<li><strong>Re-ranking</strong>: 검색 점수 + 도메인 가중치 + 최신도로 최종 순위 결정</li>
+</ol>
+<hr>
+<h3 id="3%EF%B8%8F%E2%83%A3-%EB%A7%A4%EB%89%B4%EC%96%BC-%EC%B4%88%EC%95%88-%EC%83%9D%EC%84%B1-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">3️⃣ 매뉴얼 초안 생성 워크플로우</h3>
+<p>상담을 기반으로 LLM이 자동으로 매뉴얼 초안을 생성하는 과정입니다.</p>
+<pre><code class="language-mermaid"><div class="mermaid">sequenceDiagram
+    actor Manager as 담당자
+    participant API as API<br/>/manuals/draft
+    participant Service as ManualService
+    participant Repo as ConsultationRepository
+    participant LLM as LLM Client<br/>(OpenAI/Anthropic/Mock)
+    participant Validator as ValidationService<br/>(환각 검증)
+    participant ManualRepo as ManualRepository
+    participant TaskService as TaskService<br/>(리뷰 태스크)
+
+    Manager->>API: POST /manuals/draft<br/>{consultation_id}
+    API->>Service: create_draft_from_consultation(request)
+
+    Service->>Repo: get_by_id(consultation_id)
+    Repo-->>Service: Consultation 객체
+
+    Service->>Service: _call_llm_for_draft()<br/>prompt 생성
+    Service->>LLM: complete_json(prompt, system_prompt)
+    Note over LLM: LLM이 생성한<br/>키워드, 주제, 배경, 가이드라인
+    LLM-->>Service: {keywords, topic, background, guideline}
+
+    alt enforce_hallucination_check = true
+        Service->>Validator: validate_keywords_in_source(keywords, text)
+        Validator-->>Service: (ok, missing_keywords)
+
+        Service->>Validator: validate_sentences_subset_of_source(background, text)
+        Validator-->>Service: (ok, missing_sentences)
+
+        Service->>Validator: validate_sentences_subset_of_source(guideline, text)
+        Validator-->>Service: (ok, missing_sentences)
+
+        alt 환각 감지됨 ⚠️
+            Service->>ManualRepo: create(ManualEntry)<br/>status=DRAFT
+            ManualRepo-->>Service: ManualEntry 객체
+
+            Service->>TaskService: _create_review_task()<br/>new_entry_id만 지정
+            TaskService-->>Service: ManualReviewTask 생성<br/>(관리자 검토 필요)
+
+            Note over Service: 매뉴얼은 DRAFT 상태로<br/>관리자가 수동 검토 필요
+        else 환각 없음 ✅
+            Service->>ManualRepo: create(ManualEntry)<br/>status=DRAFT
+            ManualRepo-->>Service: ManualEntry 객체
+        end
+    else enforce_hallucination_check = false
+        Service->>ManualRepo: create(ManualEntry)<br/>status=DRAFT
+        ManualRepo-->>Service: ManualEntry 객체
+    end
+
+    Service-->>API: ManualDraftResponse
+    API-->>Manager: 201 Created<br/>매뉴얼 초안 반환
+</div></code></pre>
+<p><strong>환각 방지의 핵심:</strong></p>
+<ul>
+<li>LLM이 생성한 모든 키워드와 문구가 <strong>원본 상담 텍스트</strong>에 존재하는지 검증</li>
+<li>환각 감지 시 관리자가 수동으로 검토할 수 있도록 <strong>리뷰 태스크</strong> 자동 생성</li>
+</ul>
+<hr>
+<h3 id="4%EF%B8%8F%E2%83%A3-%EB%A7%A4%EB%89%B4%EC%96%BC-%EC%8A%B9%EC%9D%B8-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">4️⃣ 매뉴얼 승인 워크플로우</h3>
+<p>생성된 매뉴얼 초안을 검토하고 승인하는 과정입니다.</p>
+<pre><code class="language-mermaid"><div class="mermaid">sequenceDiagram
+    actor Reviewer as 관리자<br/>(검토자)
+    participant API as API<br/>/tasks/{id}/approve
+    participant Service as TaskService
+    participant ManualService as ManualService<br/>(승인 로직)
+    participant ManualRepo as ManualRepository
+    participant VersionRepo as VersionRepository
+    participant Vector as VectorStore
+    participant Consultation as ConsultationRepository
+
+    Reviewer->>API: POST /tasks/{id}/approve<br/>{reviewer_id, notes}
+    API->>Service: approve_task(task_id, payload)
+
+    Service->>Service: _add_history()<br/>상태 변경 기록 (TODO → DONE)
+
+    Service->>ManualService: approve_manual(manual_id, request)
+
+    ManualService->>VersionRepo: get_latest_version()
+    VersionRepo-->>ManualService: ManualVersion (v1.0)
+
+    ManualService->>ManualService: _next_version_number()<br/>다음 버전 계산 (1.1)
+    ManualService->>VersionRepo: create(ManualVersion v1.1)
+
+    Note over ManualService: 금융권 정책: 매뉴얼 승인 시<br/>전체 버전 일괄 적용
+    ManualService->>ManualService: _deprecate_previous_entries()<br/>동일 키(업무구분/에러코드)의<br/>기존 APPROVED 매뉴얼 → DEPRECATED
+    ManualRepo->>ManualRepo: UPDATE status=DEPRECATED<br/>WHERE business_type=? AND error_code=?
+
+    ManualService->>ManualRepo: update(manual)<br/>status=APPROVED, version=1.1
+
+    ManualService->>ManualService: _index_manual_vector()<br/>승인된 매뉴얼만 벡터 인덱싱
+    ManualService->>Vector: index_document(id, text, metadata)
+    Vector-->>ManualService: success
+
+    ManualService-->>Service: ManualVersionInfo
+    Service-->>API: ManualReviewTaskResponse<br/>상태 = DONE
+    API-->>Reviewer: 200 OK
+
+    Note over ManualService,Vector: 이제 이 매뉴얼은<br/>검색 결과에 표시됨
+
+    alt 원본 상담과 연결 (선택사항)
+        Reviewer->>API: PUT /consultations/{id}<br/>{manual_entry_id}
+        API->>Consultation: update consultation<br/>manual_entry_id 설정
+        Note over Consultation: 상담 기록 -> 승인된 매뉴얼<br/>트레이서빌리티 확보
+    end
+</div></code></pre>
+<p><strong>승인 과정의 핵심:</strong></p>
+<ol>
+<li><strong>이력 기록</strong>: 검토자 정보, 검토 의견 기록</li>
+<li><strong>버전 증가</strong>: 모든 승인마다 버전 +1 (1.0 → 1.1)</li>
+<li><strong>기존 항목 폐지</strong>: 같은 키의 기존 APPROVED 매뉴얼은 DEPRECATED</li>
+<li><strong>벡터 인덱싱</strong>: APPROVED 매뉴얼만 검색 가능하도록 인덱싱</li>
+<li><strong>트레이서빌리티</strong>: 상담 기록과 승인된 매뉴얼 연결</li>
+</ol>
+<hr>
+<h3 id="5%EF%B8%8F%E2%83%A3-%EB%A9%94%EB%89%B4%EC%96%BC-%EA%B2%80%EC%83%89-%EB%B0%8F-%EC%B6%A9%EB%8F%8C-%EA%B0%90%EC%A7%80-%EC%9B%8C%ED%81%AC%ED%94%8C%EB%A1%9C%EC%9A%B0">5️⃣ 메뉴얼 검색 및 충돌 감지 워크플로우</h3>
+<p>새로 생성된 매뉴얼과 유사한 기존 매뉴얼을 자동으로 찾아 충돌을 감지합니다.</p>
+<pre><code class="language-mermaid"><div class="mermaid">sequenceDiagram
+    actor System as 시스템
+    participant Service as ManualService<br/>(충돌 감지)
+    participant Vector as VectorStore<br/>(유사도 검색)
+    participant ManualRepo as ManualRepository<br/>(상태별 필터링)
+    participant LLM as LLM Client<br/>(비교 분석)
+    participant TaskRepo as TaskRepository<br/>(리뷰 태스크 생성)
+
+    System->>Service: check_conflict_and_create_task(manual_id)
+
+    Service->>Service: _build_manual_text()<br/>매뉴얼을 벡터화할 텍스트 생성
+
+    Service->>Vector: search(query_text, top_k=3, similarity_threshold=0.85)
+    Note over Vector: 내용이 85% 이상 유사한<br/>상위 3개 메뉴얼 검색
+    Vector-->>Service: [VectorResult1, ...]
+
+    Service->>ManualRepo: find_by_ids(candidate_ids)
+    Note over ManualRepo: 검색된 메뉴얼 중<br/>APPROVED 상태만 필터링
+    ManualRepo-->>Service: [ApprovedManual1, ...]
+
+    alt 유사한 승인 매뉴얼이 있음
+        Service->>Service: 최고 유사도의 메뉴얼 선택
+
+        Service->>LLM: _call_llm_compare(old_manual, new_manual)
+        Note over LLM: LLM이 두 매뉴얼의<br/>차이점 분석
+        LLM-->>Service: {differences: [...], summary}
+
+        Service->>TaskRepo: create(ManualReviewTask)<br/>old_entry_id=기존, new_entry_id=신규<br/>유사도 점수, 차이점 포함
+        TaskRepo-->>Service: ManualReviewTask 생성
+
+        Service-->>System: ManualReviewTaskResponse
+        Note over System: ✅ 리뷰 태스크 생성됨<br/>관리자가 신규/기존 중 선택
+
+    else 유사한 승인 매뉴얼이 없음
+        Service-->>System: null
+        Note over System: ✅ 충돌 없음, 신규 매뉴얼<br/>자유롭게 승인 가능
+    end
+</div></code></pre>
+<p><strong>충돌 감지의 목적:</strong></p>
+<ul>
+<li>중복되는 매뉴얼 방지</li>
+<li>기존 매뉴얼을 업데이트할지, 새 매뉴얼을 추가할지 의사결정 지원</li>
+<li>버전 관리 일관성 유지</li>
+</ul>
+<hr>
+<h2 id="%E2%9A%99%EF%B8%8F-%EA%B0%9C%EB%B0%9C-%ED%99%98%EA%B2%BD-%EC%84%A4%EC%A0%95">⚙️ 개발 환경 설정</h2>
+<h3 id="%ED%95%84%EC%88%98-%EC%9A%94%EA%B5%AC%EC%82%AC%ED%95%AD">필수 요구사항</h3>
+<ul>
+<li><strong>Python 3.10+</strong></li>
+<li><strong>PostgreSQL 13+</strong> (또는 mock 모드로 로컬 개발)</li>
+<li><strong>Git</strong></li>
+<li><strong>UV</strong> (Python 패키지 매니저, pip 대체)</li>
+</ul>
+<h3 id="step-1-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%ED%81%B4%EB%A1%A0">Step 1: 프로젝트 클론</h3>
+<pre class="hljs"><code><div>git <span class="hljs-built_in">clone</span> https://github.com/your-org/k-helpdesk-wiki.git
+<span class="hljs-built_in">cd</span> k-helpdesk-wiki
+</div></code></pre>
+<h3 id="step-2-%EC%9D%98%EC%A1%B4%EC%84%B1-%EC%84%A4%EC%B9%98">Step 2: 의존성 설치</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># UV가 설치되어 있어야 함 (설치: curl -LsSf https://astral.sh/uv/install.sh | sh)</span>
+uv sync --all-groups
+</div></code></pre>
+<p>이 명령어가 자동으로:</p>
+<ul>
+<li>프로젝트 의존성 설치</li>
+<li>개발 도구 설치 (pytest, black, ruff, mypy 등)</li>
+<li><code>.venv</code> 가상환경 생성</li>
+</ul>
+<h3 id="step-3-%ED%99%98%EA%B2%BD-%EB%B3%80%EC%88%98-%EC%84%A4%EC%A0%95">Step 3: 환경 변수 설정</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># .env 파일 생성 (템플릿 복사)</span>
+cp .env.example .env
+
+<span class="hljs-comment"># .env 파일을 열어서 필요한 항목 설정</span>
+<span class="hljs-comment"># 개발 중에는 기본값(Mock)으로 충분합니다!</span>
+</div></code></pre>
+<p><strong>개발 환경 기본값:</strong></p>
+<pre class="hljs"><code><div><span class="hljs-comment"># 벡터스토어: Mock (인메모리)</span>
+VECTORSTORE_TYPE=mock
+
+<span class="hljs-comment"># LLM: Mock (미리 정의된 응답)</span>
+LLM_PROVIDER=mock
+
+<span class="hljs-comment"># 데이터베이스: 로컬 PostgreSQL</span>
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/khw
+</div></code></pre>
+<h3 id="step-4-%EB%8D%B0%EC%9D%B4%ED%84%B0%EB%B2%A0%EC%9D%B4%EC%8A%A4-%EC%B4%88%EA%B8%B0%ED%99%94">Step 4: 데이터베이스 초기화</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># PostgreSQL 설정</span>
+<span class="hljs-comment"># macOS (Homebrew): brew install postgresql@15</span>
+<span class="hljs-comment"># Ubuntu: sudo apt-get install postgresql</span>
+
+<span class="hljs-comment"># PostgreSQL 서비스 시작</span>
+<span class="hljs-comment"># macOS: brew services start postgresql@15</span>
+<span class="hljs-comment"># Ubuntu: sudo service postgresql start</span>
+
+<span class="hljs-comment"># 데이터베이스 및 사용자 생성</span>
+psql -U postgres -c <span class="hljs-string">"CREATE DATABASE khw;"</span>
+psql -U postgres -c <span class="hljs-string">"CREATE USER khw_user WITH PASSWORD 'password';"</span>
+psql -U postgres -c <span class="hljs-string">"GRANT ALL PRIVILEGES ON DATABASE khw TO khw_user;"</span>
+</div></code></pre>
+<p>또는 <strong>Mock 모드로 시작</strong> (DB 없이):</p>
+<pre class="hljs"><code><div><span class="hljs-comment"># .env에서 설정</span>
+VECTORSTORE_TYPE=mock
+LLM_PROVIDER=mock
+</div></code></pre>
+<h3 id="step-5-%EB%A7%88%EC%9D%B4%EA%B7%B8%EB%A0%88%EC%9D%B4%EC%85%98-%EC%84%A0%ED%83%9D%EC%82%AC%ED%95%AD">Step 5: 마이그레이션 (선택사항)</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># 데이터베이스 스키마 생성</span>
+uv run alembic upgrade head
+
+<span class="hljs-comment"># 또는 개발 중에는 자동 초기화 사용</span>
+<span class="hljs-comment"># (app/api/main.py의 lifespan 함수에서 init_db() 호출)</span>
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%9A%80-%EC%A3%BC%EC%9A%94-%EA%B0%9C%EB%B0%9C-%EB%AA%85%EB%A0%B9%EC%96%B4">🚀 주요 개발 명령어</h2>
+<h3 id="%EC%95%A0%ED%94%8C%EB%A6%AC%EC%BC%80%EC%9D%B4%EC%85%98-%EC%8B%A4%ED%96%89">애플리케이션 실행</h3>
+<h4 id="fastapi-%EA%B0%9C%EB%B0%9C-%EC%84%9C%EB%B2%84">FastAPI 개발 서버</h4>
+<pre class="hljs"><code><div><span class="hljs-comment"># 자동 리로드와 함께 실행 (권장)</span>
+uv run python main.py
+
+<span class="hljs-comment"># 또는 uvicorn 직접 실행</span>
+uv run uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
+</div></code></pre>
+<p>브라우저에서 확인:</p>
+<ul>
+<li>🌐 API 문서: http://localhost:8000/docs</li>
+<li>🔍 헬스 체크: http://localhost:8000/health</li>
+</ul>
+<h4 id="mcp-%EC%84%9C%EB%B2%84-claude-%ED%86%B5%ED%95%A9">MCP 서버 (Claude 통합)</h4>
+<pre class="hljs"><code><div><span class="hljs-comment"># 별도 터미널에서 실행</span>
+uv run python mcp_server.py
+</div></code></pre>
+<h3 id="%ED%85%8C%EC%8A%A4%ED%8A%B8-%EC%8B%A4%ED%96%89">테스트 실행</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># 모든 테스트 실행</span>
+uv run pytest
+
+<span class="hljs-comment"># 커버리지 리포트 포함</span>
+uv run pytest --cov=app tests/
+
+<span class="hljs-comment"># 특정 파일만 테스트</span>
+uv run pytest tests/unit/test_consultation_service.py -v
+
+<span class="hljs-comment"># 특정 함수만 테스트</span>
+uv run pytest tests/unit/test_consultation_service.py::test_register_consultation -v
+
+<span class="hljs-comment"># 빠른 테스트만 (마크 필터)</span>
+uv run pytest -m <span class="hljs-string">"not slow"</span> -v
+</div></code></pre>
+<h3 id="%EC%BD%94%EB%93%9C-%ED%92%88%EC%A7%88-%EA%B2%80%EC%82%AC">코드 품질 검사</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># 코드 포매팅 (Black)</span>
+uv run black app/ tests/
+
+<span class="hljs-comment"># 린팅 (Ruff)</span>
+uv run ruff check app/ tests/ --fix
+
+<span class="hljs-comment"># 타입 체크 (mypy)</span>
+uv run mypy app/
+
+<span class="hljs-comment"># 모두 한 번에</span>
+uv run black app/ tests/ &amp;&amp; uv run ruff check app/ tests/ --fix &amp;&amp; uv run mypy app/
+</div></code></pre>
+<h3 id="%EB%8D%B0%EC%9D%B4%ED%84%B0%EB%B2%A0%EC%9D%B4%EC%8A%A4-%EB%A7%88%EC%9D%B4%EA%B7%B8%EB%A0%88%EC%9D%B4%EC%85%98">데이터베이스 마이그레이션</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># 새 마이그레이션 생성 (자동 감지)</span>
+uv run alembic revision --autogenerate -m <span class="hljs-string">"Add user_email column"</span>
+
+<span class="hljs-comment"># 마이그레이션 적용</span>
+uv run alembic upgrade head
+
+<span class="hljs-comment"># 마지막 마이그레이션 되돌리기</span>
+uv run alembic downgrade -1
+
+<span class="hljs-comment"># 특정 리비전으로 이동</span>
+uv run alembic upgrade &lt;revision_id&gt;
+
+<span class="hljs-comment"># 현재 리비전 확인</span>
+uv run alembic current
+</div></code></pre>
+<h3 id="%EA%B8%B0%ED%83%80-%EC%9C%A0%EC%9A%A9%ED%95%9C-%EB%AA%85%EB%A0%B9%EC%96%B4">기타 유용한 명령어</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># 프로젝트 의존성 업데이트</span>
+uv sync --upgrade
+
+<span class="hljs-comment"># Python 인터프리터 실행 (프로젝트 환경)</span>
+uv run python
+
+<span class="hljs-comment"># 설치된 패키지 목록</span>
+uv pip list
+
+<span class="hljs-comment"># 특정 패키지 설치 (추가)</span>
+uv pip install &lt;package_name&gt;
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%8E%AC-%EB%A1%9C%EC%BB%AC-%EA%B0%9C%EB%B0%9C-%EC%8B%9C%EC%9E%91%ED%95%98%EA%B8%B0">🎬 로컬 개발 시작하기</h2>
+<h3 id="5%EB%B6%84-%EC%95%88%EC%97%90-%EC%8B%9C%EC%9E%91%ED%95%98%EA%B8%B0">5분 안에 시작하기</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># 1️⃣ 프로젝트 준비</span>
+<span class="hljs-built_in">cd</span> k-helpdesk-wiki
+uv sync --all-groups
+
+<span class="hljs-comment"># 2️⃣ 환경 설정</span>
+cp .env.example .env
+<span class="hljs-comment"># .env에서 필요한 값 확인 (Mock 모드 기본값 사용)</span>
+
+<span class="hljs-comment"># 3️⃣ 터미널 1: FastAPI 실행</span>
+uv run python main.py
+<span class="hljs-comment"># 또는</span>
+uv run uvicorn app.api.main:app --reload
+
+<span class="hljs-comment"># 4️⃣ 터미널 2: 테스트 실행 (선택)</span>
+uv run pytest tests/ -v
+
+<span class="hljs-comment"># 5️⃣ 브라우저에서 확인</span>
+<span class="hljs-comment"># http://localhost:8000/docs (Swagger UI)</span>
+</div></code></pre>
+<h3 id="%EC%B2%AB-%EB%B2%88%EC%A7%B8-api-%ED%98%B8%EC%B6%9C-%ED%85%8C%EC%8A%A4%ED%8A%B8">첫 번째 API 호출 테스트</h3>
+<h4 id="%EC%83%81%EB%8B%B4-%EB%93%B1%EB%A1%9D">상담 등록</h4>
+<pre class="hljs"><code><div>curl -X POST http://localhost:8000/api/v1/consultations \
+  -H <span class="hljs-string">"Content-Type: application/json"</span> \
+  -d <span class="hljs-string">'{
+    "summary": "고객이 결제 오류 호소",
+    "inquiry_text": "신용카드로 결제 시 '</span>CVV 인증 실패<span class="hljs-string">' 오류 발생",
+    "action_taken": "결제 서버 재부팅 후 해결",
+    "branch_code": "001",
+    "employee_id": "EMP001",
+    "business_type": "카드결제",
+    "error_code": "CVV_AUTH_FAIL"
+  }'</span>
+</div></code></pre>
+<p>응답 예시:</p>
+<pre class="hljs"><code><div>{
+  <span class="hljs-attr">"id"</span>: <span class="hljs-string">"550e8400-e29b-41d4-a716-446655440000"</span>,
+  <span class="hljs-attr">"summary"</span>: <span class="hljs-string">"고객이 결제 오류 호소"</span>,
+  <span class="hljs-attr">"branch_code"</span>: <span class="hljs-string">"001"</span>,
+  <span class="hljs-attr">"created_at"</span>: <span class="hljs-string">"2024-01-15T10:30:00Z"</span>,
+  ...
+}
+</div></code></pre>
+<h4 id="%EC%83%81%EB%8B%B4-%EA%B2%80%EC%83%89">상담 검색</h4>
+<pre class="hljs"><code><div>curl -X GET <span class="hljs-string">"http://localhost:8000/api/v1/consultations/search?query=결제%20오류&amp;branch_code=001"</span> \
+  -H <span class="hljs-string">"Content-Type: application/json"</span>
+</div></code></pre>
+<h4 id="%EB%A7%A4%EB%89%B4%EC%96%BC-%EC%B4%88%EC%95%88-%EC%83%9D%EC%84%B1">매뉴얼 초안 생성</h4>
+<pre class="hljs"><code><div>curl -X POST http://localhost:8000/api/v1/manuals/draft \
+  -H <span class="hljs-string">"Content-Type: application/json"</span> \
+  -d <span class="hljs-string">'{
+    "consultation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "enforce_hallucination_check": true
+  }'</span>
+</div></code></pre>
+<h4 id="%EB%A7%A4%EB%89%B4%EC%96%BC-%EC%8A%B9%EC%9D%B8">매뉴얼 승인</h4>
+<pre class="hljs"><code><div><span class="hljs-comment"># 먼저 리뷰 태스크 목록 조회</span>
+curl -X GET http://localhost:8000/api/v1/tasks
+
+<span class="hljs-comment"># 그 다음 승인</span>
+curl -X POST http://localhost:8000/api/v1/tasks/{task_id}/approve \
+  -H <span class="hljs-string">"Content-Type: application/json"</span> \
+  -d <span class="hljs-string">'{
+    "reviewer_id": "REV001",
+    "review_notes": "승인합니다"
+  }'</span>
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%93%9D-%EC%BD%94%EB%93%9C-%EC%9E%91%EC%84%B1-%EC%8B%9C-%EC%A4%91%EC%9A%94%ED%95%9C-%EA%B7%9C%EC%B9%99">📝 코드 작성 시 중요한 규칙</h2>
+<h3 id="1%EF%B8%8F%E2%83%A3-service-layer%EB%8A%94-%ED%95%AD%EC%83%81-fastapi-independent">1️⃣ Service Layer는 항상 FastAPI-Independent</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># ❌ 잘못된 방식 - FastAPI 타입 사용</span>
+<span class="hljs-keyword">from</span> fastapi <span class="hljs-keyword">import</span> HTTPException
+
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsultationService</span>:</span>
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create</span><span class="hljs-params">(...)</span> -&gt; dict:</span>
+        <span class="hljs-keyword">raise</span> HTTPException(status_code=<span class="hljs-number">400</span>, detail=<span class="hljs-string">"..."</span>)
+</div></code></pre>
+<pre class="hljs"><code><div><span class="hljs-comment"># ✅ 올바른 방식 - 커스텀 예외 사용</span>
+<span class="hljs-keyword">from</span> app.core.exceptions <span class="hljs-keyword">import</span> ValidationError
+
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsultationService</span>:</span>
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create</span><span class="hljs-params">(...)</span> -&gt; ConsultationResponse:</span>
+        <span class="hljs-keyword">raise</span> ValidationError(<span class="hljs-string">"..."</span>)  <span class="hljs-comment"># FastAPI가 자동으로 처리</span>
+</div></code></pre>
+<p><strong>왜?</strong> 같은 서비스를 API와 MCP 서버에서 재사용할 수 있어야 함</p>
+<h3 id="2%EF%B8%8F%E2%83%A3-repository%EB%8A%94-%EB%AA%A8%EB%93%A0-%EB%8D%B0%EC%9D%B4%ED%84%B0-%EC%A0%91%EA%B7%BC%EC%9D%84-%EB%8B%B4%EB%8B%B9">2️⃣ Repository는 모든 데이터 접근을 담당</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># ❌ 잘못된 방식 - Service가 직접 DB 접근</span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsultationService</span>:</span>
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create</span><span class="hljs-params">(...)</span>:</span>
+        result = <span class="hljs-keyword">await</span> self.session.execute(...)  <span class="hljs-comment"># 직접 쿼리!</span>
+
+<span class="hljs-comment"># ✅ 올바른 방식 - Repository를 통한 접근</span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsultationService</span>:</span>
+    <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self, repository: ConsultationRepository)</span>:</span>
+        self.repository = repository
+
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create</span><span class="hljs-params">(...)</span>:</span>
+        consultation = <span class="hljs-keyword">await</span> self.repository.create_consultation(...)
+</div></code></pre>
+<h3 id="3%EF%B8%8F%E2%83%A3-%EB%AA%A8%EB%93%A0-async-%ED%95%A8%EC%88%98%EB%8A%94-await-%ED%95%84%EC%88%98">3️⃣ 모든 async 함수는 await 필수</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># ❌ 잘못된 방식 - await 빠짐</span>
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">process_data</span><span class="hljs-params">()</span>:</span>
+    result = self.repository.get_by_id(id)  <span class="hljs-comment"># async인데 await 없음!</span>
+
+<span class="hljs-comment"># ✅ 올바른 방식</span>
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">process_data</span><span class="hljs-params">()</span>:</span>
+    result = <span class="hljs-keyword">await</span> self.repository.get_by_id(id)
+</div></code></pre>
+<h3 id="4%EF%B8%8F%E2%83%A3-%ED%83%80%EC%9E%85-%ED%9E%8C%ED%8A%B8%EB%8A%94-%ED%95%84%EC%88%98-mypy-strict">4️⃣ 타입 힌트는 필수 (mypy strict)</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># ❌ 타입 힌트 부족</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">calculate_score</span><span class="hljs-params">(data)</span>:</span>  <span class="hljs-comment"># data의 타입이?</span>
+    <span class="hljs-keyword">return</span> data[<span class="hljs-string">'score'</span>] * <span class="hljs-number">1.2</span>
+
+<span class="hljs-comment"># ✅ 완전한 타입 힌트</span>
+<span class="hljs-keyword">from</span> typing <span class="hljs-keyword">import</span> Any
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">calculate_score</span><span class="hljs-params">(data: dict[str, Any])</span> -&gt; float:</span>
+    <span class="hljs-keyword">return</span> data[<span class="hljs-string">'score'</span>] * <span class="hljs-number">1.2</span>
+</div></code></pre>
+<h3 id="5%EF%B8%8F%E2%83%A3-%ED%99%98%EA%B0%81-%EB%B0%A9%EC%A7%80-%ED%95%AD%EC%83%81-%EC%9B%90%EB%AC%B8%EC%9D%84-prompt%EC%97%90-%ED%8F%AC%ED%95%A8">5️⃣ 환각 방지: 항상 원문을 Prompt에 포함</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># ❌ 잘못된 방식 - 원문 없이 LLM 호출</span>
+prompt = <span class="hljs-string">f"주제: <span class="hljs-subst">{topic}</span>에 대한 설명 작성"</span>
+
+<span class="hljs-comment"># ✅ 올바른 방식 - 원문(context) 포함</span>
+prompt = <span class="hljs-string">f"""
+원본 상담 내용:
+<span class="hljs-subst">{consultation.inquiry_text}</span>
+
+위 상담 내용을 바탕으로 매뉴얼을 작성하세요.
+새로운 정보를 추가하지 마세요.
+"""</span>
+</div></code></pre>
+<h3 id="6%EF%B8%8F%E2%83%A3-%EC%98%88%EC%99%B8%EB%8A%94-%EC%BB%A4%EC%8A%A4%ED%85%80-%EC%98%88%EC%99%B8-%EC%82%AC%EC%9A%A9">6️⃣ 예외는 커스텀 예외 사용</h3>
+<pre class="hljs"><code><div><span class="hljs-keyword">from</span> app.core.exceptions <span class="hljs-keyword">import</span> (
+    RecordNotFoundError,
+    ValidationError,
+    VectorIndexError,
+)
+
+<span class="hljs-comment"># 데이터를 찾지 못함</span>
+<span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> consultation:
+    <span class="hljs-keyword">raise</span> RecordNotFoundError(<span class="hljs-string">f"Consultation(id=<span class="hljs-subst">{id}</span>) not found"</span>)
+
+<span class="hljs-comment"># 입력값 검증 실패</span>
+<span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> is_valid_data(data):
+    <span class="hljs-keyword">raise</span> ValidationError(<span class="hljs-string">"Invalid consultation data"</span>)
+
+<span class="hljs-comment"># 벡터 인덱싱 실패</span>
+<span class="hljs-keyword">try</span>:
+    <span class="hljs-keyword">await</span> vectorstore.index(...)
+<span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> exc:
+    <span class="hljs-keyword">raise</span> VectorIndexError(<span class="hljs-string">f"Vector index failed: <span class="hljs-subst">{exc}</span>"</span>)
+</div></code></pre>
+<h3 id="7%EF%B8%8F%E2%83%A3-%EB%A1%9C%EA%B9%85%EC%9D%80-%EA%B5%AC%EC%A1%B0%ED%99%94%EB%90%9C-%ED%98%95%EC%8B%9D-%EC%82%AC%EC%9A%A9">7️⃣ 로깅은 구조화된 형식 사용</h3>
+<pre class="hljs"><code><div><span class="hljs-keyword">from</span> app.core.logging <span class="hljs-keyword">import</span> get_logger
+
+logger = get_logger(__name__)
+
+<span class="hljs-comment"># ❌ 문자열 포매팅</span>
+logger.info(<span class="hljs-string">f"Consultation created: <span class="hljs-subst">{consultation.id}</span>"</span>)
+
+<span class="hljs-comment"># ✅ 구조화된 로깅 (키=값)</span>
+logger.info(<span class="hljs-string">"consultation_created"</span>, consultation_id=str(consultation.id))
+logger.warning(<span class="hljs-string">"vector_index_failed"</span>,
+               consultation_id=str(consultation.id),
+               error=str(exc))
+</div></code></pre>
+<hr>
+<h2 id="%E2%9D%93-%EC%9E%90%EC%A3%BC-%EB%AC%BB%EB%8A%94-%EC%A7%88%EB%AC%B8-faq">❓ 자주 묻는 질문 (FAQ)</h2>
+<h3 id="q1-%22mock-%EB%AA%A8%EB%93%9C%22%EC%99%80-%22real-%EB%AA%A8%EB%93%9C%22%EC%9D%98-%EC%B0%A8%EC%9D%B4%EB%8A%94">Q1: &quot;Mock 모드&quot;와 &quot;Real 모드&quot;의 차이는?</h3>
+<p><strong>Mock 모드</strong> (개발용):</p>
+<pre class="hljs"><code><div>VECTORSTORE_TYPE=mock
+LLM_PROVIDER=mock
+</div></code></pre>
+<ul>
+<li>데이터베이스 필요 없음 (인메모리)</li>
+<li>LLM이 미리 정의된 응답만 반환</li>
+<li>테스트와 로컬 개발에 최적</li>
+</ul>
+<p><strong>Real 모드</strong> (프로덕션):</p>
+<pre class="hljs"><code><div>VECTORSTORE_TYPE=pgvector  <span class="hljs-comment"># 또는 pinecone, qdrant</span>
+LLM_PROVIDER=openai  <span class="hljs-comment"># 또는 anthropic</span>
+OPENAI_API_KEY=sk-...
+DATABASE_URL=postgresql://...
+</div></code></pre>
+<ul>
+<li>실제 PostgreSQL 데이터베이스 필요</li>
+<li>실제 LLM API 호출</li>
+<li>실제 벡터 검색</li>
+</ul>
+<hr>
+<h3 id="q2-%22vectorstore%22%EA%B0%80-%EC%A0%95%ED%99%95%ED%9E%88-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80%EC%9A%94">Q2: &quot;VectorStore&quot;가 정확히 무엇인가요?</h3>
+<p><strong>VectorStore</strong>는 텍스트를 **벡터(숫자 배열)**로 변환하여 저장하고 <strong>의미론적 유사성</strong>으로 검색하는 저장소입니다.</p>
+<pre class="hljs"><code><div>텍스트: &quot;신용카드 결제 오류&quot;
+        ↓ (Embedding)
+벡터:  [0.12, -0.45, 0.89, ..., 0.21]  (1536차원)
+
+검색: &quot;카드 결제 실패&quot;
+     ↓ (Embedding)
+벡터: [0.11, -0.46, 0.88, ..., 0.22]
+
+⚖️ 코사인 유사도 계산 → 0.95 (95% 유사)
+</div></code></pre>
+<p><strong>구현 옵션:</strong></p>
+<ul>
+<li><strong>mock</strong>: 인메모리 (개발)</li>
+<li><strong>pgvector</strong>: PostgreSQL 확장</li>
+<li><strong>pinecone</strong>: 클라우드 벡터 DB</li>
+<li><strong>qdrant</strong>: 오픈소스 벡터 DB</li>
+</ul>
+<hr>
+<h3 id="q3-%EC%99%9C-rdb%EC%99%80-vectorstore%EA%B0%80-%EB%94%B0%EB%A1%9C-%EC%9E%88%EB%82%98%EC%9A%94">Q3: 왜 RDB와 VectorStore가 따로 있나요?</h3>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>RDB (PostgreSQL)</th>
+<th>VectorStore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>용도</strong></td>
+<td>원본 데이터 저장</td>
+<td>검색 인덱스</td>
+</tr>
+<tr>
+<td><strong>신뢰성</strong></td>
+<td>⭐⭐⭐⭐⭐ ACID</td>
+<td>⭐⭐⭐ 부분 동기화</td>
+</tr>
+<tr>
+<td><strong>기능</strong></td>
+<td>정확한 필터링, 트랜잭션</td>
+<td>의미론적 검색</td>
+</tr>
+<tr>
+<td><strong>실패 시</strong></td>
+<td>데이터 손실</td>
+<td>검색 불가 (데이터 안전)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>설계 원칙:</strong></p>
+<ul>
+<li>RDB = 원본 데이터 (진실의 원천)</li>
+<li>VectorStore = 검색 인덱스 (필요시 재구성 가능)</li>
+</ul>
+<hr>
+<h3 id="q4-%ED%99%98%EA%B0%81hallucination%EC%9D%84-%EB%B0%A9%EC%A7%80%ED%95%98%EB%8A%94-%EB%B0%A9%EB%B2%95%EC%9D%80">Q4: 환각(Hallucination)을 방지하는 방법은?</h3>
+<p><strong>3가지 검증 방법:</strong></p>
+<ol>
+<li>
+<p><strong>키워드 검증</strong>: 모든 키워드가 원문에 존재?</p>
+<pre class="hljs"><code><div>keywords = [<span class="hljs-string">"결제"</span>, <span class="hljs-string">"CVV"</span>, <span class="hljs-string">"인증"</span>]
+source = <span class="hljs-string">"신용카드 결제 시 CVV 인증 실패..."</span>
+<span class="hljs-comment"># 모든 키워드 ✅ 포함되어 있음</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>배경 검증</strong>: 배경 문장들이 원문의 부분집합?</p>
+<pre class="hljs"><code><div>background = <span class="hljs-string">"신용카드로 결제할 때 CVV 인증 오류가 발생한다."</span>
+source = <span class="hljs-string">"신용카드로 결제 시 'CVV 인증 실패' 오류 발생"</span>
+<span class="hljs-comment"># 원문에 포함되어 있음 ✅</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>가이드라인 검증</strong>: 가이드라인이 원문에 근거가 있는가?</p>
+</li>
+</ol>
+<hr>
+<h3 id="q5-%EB%A7%A4%EB%89%B4%EC%96%BC-%EB%B2%84%EC%A0%84%EC%9D%80-%EC%96%B4%EB%96%BB%EA%B2%8C-%EA%B4%80%EB%A6%AC%EB%90%98%EB%82%98%EC%9A%94">Q5: 매뉴얼 버전은 어떻게 관리되나요?</h3>
+<p><strong>금융권 정책 반영:</strong></p>
+<ul>
+<li>매뉴얼 <strong>승인마다 버전 +1</strong> (1.0 → 1.1 → 1.2)</li>
+<li>같은 키(업무구분/에러코드)의 <strong>기존 항목은 DEPRECATED</strong></li>
+<li><strong>APPROVED 메뉴얼만</strong> 검색에 노출</li>
+<li>메뉴얼 트레이서빌리티: 상담 → 초안 → 승인</li>
+</ul>
+<pre class="hljs"><code><div>Consultation &quot;CVV 오류&quot;
+  ↓
+ManualEntry (DRAFT)
+  ↓ (검토)
+ManualEntry (APPROVED, v1.0)
+  ↓ (같은 주제 새 상담)
+ManualEntry (DRAFT)
+  ↓ (승인)
+ManualEntry (APPROVED, v1.1)
+
+이전 v1.0 → DEPRECATED (검색에서 제외)
+</div></code></pre>
+<hr>
+<h3 id="q6-%ED%85%8C%EC%8A%A4%ED%8A%B8%EB%8A%94-%EC%96%B4%EB%96%BB%EA%B2%8C-%EC%9E%91%EC%84%B1%ED%95%98%EB%82%98%EC%9A%94">Q6: 테스트는 어떻게 작성하나요?</h3>
+<p><strong>단위 테스트 (Service 테스트):</strong></p>
+<pre class="hljs"><code><div><span class="hljs-keyword">import</span> pytest
+<span class="hljs-keyword">from</span> unittest.mock <span class="hljs-keyword">import</span> AsyncMock, MagicMock
+
+<span class="hljs-meta">@pytest.mark.asyncio</span>
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">test_register_consultation</span><span class="hljs-params">()</span>:</span>
+    <span class="hljs-comment"># 1️⃣ Mock 객체 준비</span>
+    mock_repo = AsyncMock(spec=ConsultationRepository)
+    mock_vectorstore = AsyncMock(spec=VectorStoreProtocol)
+
+    <span class="hljs-comment"># 2️⃣ Mock 반환값 설정</span>
+    mock_consultation = Consultation(id=UUID(...), ...)
+    mock_repo.create_consultation.return_value = mock_consultation
+
+    <span class="hljs-comment"># 3️⃣ Service 생성 (mock 주입)</span>
+    service = ConsultationService(
+        session=AsyncMock(),
+        repository=mock_repo,
+        vectorstore=mock_vectorstore,
+    )
+
+    <span class="hljs-comment"># 4️⃣ 테스트 실행</span>
+    result = <span class="hljs-keyword">await</span> service.create_consultation(ConsultationCreate(...))
+
+    <span class="hljs-comment"># 5️⃣ 검증</span>
+    <span class="hljs-keyword">assert</span> result.id == mock_consultation.id
+    mock_repo.create_consultation.assert_called_once()
+    mock_vectorstore.index_document.assert_called_once()
+</div></code></pre>
+<p><strong>통합 테스트:</strong></p>
+<ul>
+<li>실제 Repository + Service 조합 테스트</li>
+<li>테스트 데이터베이스 사용</li>
+<li>VectorStore/LLM은 Mock으로 대체</li>
+</ul>
+<hr>
+<h3 id="q7-api-%EB%AC%B8%EC%84%9C%EB%8A%94-%EC%96%B4%EB%94%94%EC%84%9C-%ED%99%95%EC%9D%B8%ED%95%98%EB%82%98%EC%9A%94">Q7: API 문서는 어디서 확인하나요?</h3>
+<pre class="hljs"><code><div><span class="hljs-comment"># FastAPI 실행 후</span>
+uv run python main.py
+
+<span class="hljs-comment"># 브라우저 접속</span>
+<span class="hljs-comment"># Swagger UI: http://localhost:8000/docs</span>
+<span class="hljs-comment"># ReDoc: http://localhost:8000/redoc</span>
+</div></code></pre>
+<p>모든 엔드포인트, 요청/응답 스키마, 예제가 자동으로 생성됩니다!</p>
+<hr>
+<h3 id="q8-mcp-%EC%84%9C%EB%B2%84%EB%8A%94-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80%EC%9A%94">Q8: MCP 서버는 무엇인가요?</h3>
+<p><strong>MCP (Model Context Protocol)</strong>:</p>
+<ul>
+<li>Claude가 외부 시스템과 상호작용할 수 있게 해주는 프로토콜</li>
+<li>KHW의 서비스를 <strong>Claude에서 직접 사용</strong> 가능</li>
+</ul>
+<pre class="hljs"><code><div><span class="hljs-comment"># MCP 서버 실행</span>
+uv run python mcp_server.py
+
+<span class="hljs-comment"># Claude Desktop에서 KHW 도구 사용 가능</span>
+<span class="hljs-comment"># - create_consultation: 상담 등록</span>
+<span class="hljs-comment"># - search_consultations: 상담 검색</span>
+<span class="hljs-comment"># - generate_manual_draft: 매뉴얼 생성</span>
+<span class="hljs-comment"># - approve_review_task: 검토 승인</span>
+<span class="hljs-comment"># 등...</span>
+</div></code></pre>
+<p>자세한 설정은 <a href="docs/MCP_SETUP.md">MCP_SETUP.md</a> 참조</p>
+<hr>
+<h3 id="q9-%ED%94%84%EB%A1%9C%EB%8D%95%EC%85%98-%EB%B0%B0%ED%8F%AC-%EC%8B%9C-%EC%A3%BC%EC%9D%98%ED%95%A0-%EC%A0%90%EC%9D%80">Q9: 프로덕션 배포 시 주의할 점은?</h3>
+<ol>
+<li>
+<p><strong>환경 변수 설정</strong></p>
+<pre class="hljs"><code><div>ENVIRONMENT=production
+DEBUG=<span class="hljs-literal">false</span>
+SECRET_KEY=&lt;강력한 임의 문자열&gt;
+</div></code></pre>
+</li>
+<li>
+<p><strong>데이터베이스</strong></p>
+<pre class="hljs"><code><div>DATABASE_URL=postgresql+asyncpg://user:pass@prod-db.example.com/khw
+DATABASE_POOL_SIZE=20  <span class="hljs-comment"># 증가</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>VectorStore &amp; LLM</strong></p>
+<pre class="hljs"><code><div>VECTORSTORE_TYPE=pgvector  <span class="hljs-comment"># 또는 cloud 서비스</span>
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+</div></code></pre>
+</li>
+<li>
+<p><strong>로깅</strong></p>
+<pre class="hljs"><code><div>LOG_LEVEL=INFO
+LOG_JSON=<span class="hljs-literal">true</span>  <span class="hljs-comment"># 구조화된 로깅</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>마이그레이션</strong></p>
+<pre class="hljs"><code><div><span class="hljs-comment"># 배포 전 반드시 실행</span>
+uv run alembic upgrade head
+</div></code></pre>
+</li>
+</ol>
+<hr>
+<h3 id="q10-%EC%83%88%EB%A1%9C%EC%9A%B4-%EA%B8%B0%EB%8A%A5%EC%9D%84-%EC%B6%94%EA%B0%80%ED%95%98%EB%A0%A4%EB%A9%B4-%EC%96%B4%EB%96%BB%EA%B2%8C-%ED%95%B4%EC%95%BC-%ED%95%98%EB%82%98%EC%9A%94">Q10: 새로운 기능을 추가하려면 어떻게 해야 하나요?</h3>
+<p><strong>일반적인 절차:</strong></p>
+<ol>
+<li>
+<p><strong>Pydantic Schema 정의</strong> (<code>app/schemas/</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">NewFeatureCreate</span><span class="hljs-params">(BaseModel)</span>:</span>
+    name: str
+    value: int
+</div></code></pre>
+</li>
+<li>
+<p><strong>SQLAlchemy Model 추가</strong> (<code>app/models/</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">NewFeature</span><span class="hljs-params">(BaseModel)</span>:</span>
+    __tablename__ = <span class="hljs-string">"new_features"</span>
+    name: Mapped[str]
+    value: Mapped[int]
+</div></code></pre>
+</li>
+<li>
+<p><strong>Repository 메서드 추가</strong> (<code>app/repositories/</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">NewFeatureRepository</span><span class="hljs-params">(BaseRepository)</span>:</span>
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create_feature</span><span class="hljs-params">(self, data: NewFeatureCreate)</span> -&gt; NewFeature:</span>
+        <span class="hljs-comment"># CRUD 로직</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>Service 비즈니스 로직 추가</strong> (<code>app/services/</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">SomeService</span>:</span>
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">process_feature</span><span class="hljs-params">(self, data: NewFeatureCreate)</span> -&gt; Response:</span>
+        <span class="hljs-comment"># 비즈니스 로직</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>FastAPI Router 추가</strong> (<code>app/routers/</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-meta">@router.post("/features")</span>
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create_feature</span><span class="hljs-params">(
+    data: NewFeatureCreate,
+    service: SomeService = Depends<span class="hljs-params">(get_service)</span>,
+)</span> -&gt; Response:</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">await</span> service.process_feature(data)
+</div></code></pre>
+</li>
+<li>
+<p><strong>테스트 작성</strong> (<code>tests/</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-meta">@pytest.mark.asyncio</span>
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">test_process_feature</span><span class="hljs-params">()</span>:</span>
+    <span class="hljs-comment"># 테스트</span>
+</div></code></pre>
+</li>
+<li>
+<p><strong>(선택) MCP 도구 추가</strong> (<code>app/mcp/tools.py</code>)</p>
+</li>
+</ol>
+<hr>
+<h2 id="%F0%9F%8E%93-%EB%8B%A4%EC%9D%8C-%EB%8B%A8%EA%B3%84">🎓 다음 단계</h2>
+<p>축하합니다! 이제 KHW 프로젝트의 기본을 이해했습니다. 🎉</p>
+<p><strong>추가로 학습할 사항:</strong></p>
+<ul>
+<li>📚 <a href="docs/KHW_RFP.md">KHW_RFP.md</a> - 전체 요구사항 정의서</li>
+<li>📚 <a href="docs/MCP_SETUP.md">MCP_SETUP.md</a> - MCP 서버 상세 설정</li>
+<li>📚 <a href="CLAUDE.md">CLAUDE.md</a> - 프로젝트 개발 지침</li>
+</ul>
+<p><strong>첫 번째 기여:</strong></p>
+<ol>
+<li>간단한 버그 수정으로 시작</li>
+<li>테스트 추가 (<a href="tests/unit/">tests/unit/</a> 참조)</li>
+<li>코드 리뷰 받기</li>
+<li>병합!</li>
+</ol>
+<p><strong>도움이 필요하면:</strong></p>
+<ul>
+<li>Slack: #dev-khw 채널</li>
+<li>문서: docs/ 폴더</li>
+<li>이슈: GitHub Issues</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%93%9E-%EC%97%B0%EB%9D%BD%EC%B2%98--%EB%A6%AC%EC%86%8C%EC%8A%A4">📞 연락처 &amp; 리소스</h2>
+<table>
+<thead>
+<tr>
+<th>주제</th>
+<th>담당자</th>
+<th>연락처</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>아키텍처 &amp; 설계</td>
+<td>개발 리더</td>
+<td>slack: @dev-lead</td>
+</tr>
+<tr>
+<td>LLM &amp; 환각 방지</td>
+<td>AI 팀</td>
+<td>slack: @ai-team</td>
+</tr>
+<tr>
+<td>데이터베이스</td>
+<td>데이터베이스 팀</td>
+<td>slack: @db-team</td>
+</tr>
+<tr>
+<td>배포 &amp; 인프라</td>
+<td>DevOps</td>
+<td>slack: @devops</td>
+</tr>
+</tbody>
+</table>
+<p><strong>유용한 링크:</strong></p>
+<ul>
+<li>🔗 프로젝트 GitHub: https://github.com/your-org/k-helpdesk-wiki</li>
+<li>🔗 API 문서: http://localhost:8000/docs (로컬 실행 후)</li>
+<li>🔗 요구사항: <a href="docs/KHW_RFP.md">KHW_RFP.md</a></li>
+</ul>
+<hr>
+<p><strong>Happy Coding! 🚀</strong></p>
+<p>마지막으로, 질문이나 피드백이 있으면 망설이지 말고 팀에 물어보세요.
+우리는 모두 새로 배운 사람들이었고, 함께 성장합니다! 💪</p>
+
+</body>
+</html>

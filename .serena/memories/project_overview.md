@@ -1,0 +1,4 @@
+- Purpose: 고객 상담 내역을 기반으로 메뉴얼을 자동 생성/관리하는 Helpdesk Wiki. 벡터 기반 유사 상담 검색, LLM 자동 메뉴얼 생성, 충돌 감지와 검토 워크플로우, 환각 방지 규칙 적용.
+- Stack: Python 3.10+, FastAPI. Layered structure: app/{api(FastAPI entrypoints), routers, services(business logic, FastAPI-agnostic), repositories(RDB+vector access), models(SQLAlchemy), schemas(Pydantic DTOs), vectorstore, llm, queue, mcp}. Entry points main.py (API), mcp_server.py (MCP/Claude).
+- Data/infra: default mock vectorstore/LLM; optional PostgreSQL + pgvector; optional Redis for queue. Env from .env.example. Alembic configured (alembic/).
+- Docs: README.md, docs/KHW_RPF.md requirements, docs/MCP_SETUP.md for Claude.
