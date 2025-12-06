@@ -69,12 +69,23 @@ class MockLLMClient:
 
         logger.debug("llm_complete_json_called", prompt_length=len(prompt))
 
+        lowered = prompt.lower()
+
+        # 메뉴얼 초안 생성용: keywords/topic/background/guideline 모두 반환
+        if ("keywords" in lowered or "키워드" in prompt) and ("topic" in lowered or "주제" in prompt):
+            return {
+                "keywords": ["시스템", "로그인"],
+                "topic": "로그인 오류 안내",
+                "background": "사용자가 로그인 시도 시 오류가 발생했다는 상담 내용",
+                "guideline": "재시도 전 캐시 삭제 및 비밀번호 확인을 안내",
+            }
+
         # Detect prompt type and return appropriate mock response
-        if "keywords" in prompt.lower() or "키워드" in prompt:
+        if "keywords" in lowered or "키워드" in prompt:
             return {
                 "keywords": ["키워드1", "키워드2"],
             }
-        elif "topic" in prompt.lower() or "주제" in prompt:
+        elif "topic" in lowered or "주제" in prompt:
             return {
                 "topic": "Mock 주제",
                 "background": "Mock 배경 설명",

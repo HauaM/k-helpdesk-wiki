@@ -6,6 +6,7 @@ Consultation Repository Layer
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Sequence
 from uuid import UUID
 
@@ -23,6 +24,16 @@ class ConsultationSearchFilters:
     branch_code: str | None = None
     business_type: str | None = None
     error_code: str | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+
+
+def _to_utc(dt: datetime) -> datetime:
+    """Return a timezone-aware datetime in UTC."""
+
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 class ConsultationRepository:
@@ -68,6 +79,10 @@ class ConsultationRepository:
             conditions.append(Consultation.business_type == filters.business_type)
         if filters.error_code:
             conditions.append(Consultation.error_code == filters.error_code)
+        if filters.start_date:
+            conditions.append(Consultation.created_at >= _to_utc(filters.start_date))
+        if filters.end_date:
+            conditions.append(Consultation.created_at <= _to_utc(filters.end_date))
 
         stmt = select(Consultation).where(*conditions)
         result = await self.session.execute(stmt)

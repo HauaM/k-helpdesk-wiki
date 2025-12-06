@@ -183,6 +183,8 @@ class ConsultationService:
             branch_code=search_request.filters.branch_code,
             business_type=search_request.filters.business_type,
             error_code=search_request.filters.error_code,
+            start_date=search_request.filters.start_date,
+            end_date=search_request.filters.end_date,
         )
         consultations = await self.repository.search_by_ids(
             [res.id for res in vector_results],

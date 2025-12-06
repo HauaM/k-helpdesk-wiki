@@ -7,6 +7,7 @@ from typing import Literal
 
 from app.vectorstore.protocol import VectorStoreProtocol
 from app.vectorstore.mock import MockVectorStore
+from app.vectorstore.pgvector import PGVectorStore
 from app.core.config import settings
 from app.core.logging import get_logger
 
@@ -48,19 +49,21 @@ def get_vectorstore(
     if vectorstore_type == "mock":
         return MockVectorStore(index_name=index_name)
 
-    # TODO: Implement other vectorstore types
-    # elif vectorstore_type == "pgvector":
-    #     return PGVectorStore(index_name=index_name)
-    # elif vectorstore_type == "pinecone":
-    #     return PineconeVectorStore(index_name=index_name)
-    # elif vectorstore_type == "qdrant":
-    #     return QdrantVectorStore(index_name=index_name)
+    if vectorstore_type == "pgvector":
+        return PGVectorStore(index_name=index_name)
 
-    else:
-        raise ValueError(
-            f"Unsupported vectorstore_type: {vectorstore_type}. "
-            f"Supported types: mock, pgvector, pinecone, qdrant"
+    if vectorstore_type in {"pinecone", "qdrant"}:
+        logger.warning(
+            "vectorstore_not_implemented_fallback_to_mock",
+            requested_type=vectorstore_type,
+            index_name=index_name,
         )
+        return MockVectorStore(index_name=index_name)
+
+    raise ValueError(
+        f"Unsupported vectorstore_type: {vectorstore_type}. "
+        "Supported types: mock, pgvector (pinecone/qdrant fallback to mock until implemented)"
+    )
 
 
 # Singleton instances for dependency injection

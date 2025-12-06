@@ -5,6 +5,7 @@ Creates appropriate LLM client based on configuration
 
 from app.llm.protocol import LLMClientProtocol
 from app.llm.mock import MockLLMClient
+from app.llm.ollama import OllamaLLMClient
 from app.core.config import settings
 from app.core.logging import get_logger
 
@@ -32,6 +33,12 @@ def get_llm_client() -> LLMClientProtocol:
     if provider == "mock":
         return MockLLMClient(model=settings.llm_model)
 
+    if provider == "ollama":
+        return OllamaLLMClient(
+            base_url=settings.ollama_base_url,
+            model=settings.llm_model,
+        )
+
     # TODO: Implement real LLM clients
     # elif provider == "openai":
     #     return OpenAIClient(
@@ -47,7 +54,7 @@ def get_llm_client() -> LLMClientProtocol:
     else:
         raise ValueError(
             f"Unsupported llm_provider: {provider}. "
-            f"Supported providers: mock, openai, anthropic"
+            f"Supported providers: mock, openai, anthropic, ollama"
         )
 
 

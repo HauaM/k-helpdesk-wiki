@@ -171,3 +171,35 @@ class ManualVersionInfo(BaseSchema):
 
     version: str
     approved_at: datetime
+
+
+class ManualDiffEntrySnapshot(BaseSchema):
+    """메뉴얼 항목 스냅샷 (Diff용)."""
+
+    logical_key: str
+    keywords: list[str]
+    topic: str
+    background: str
+    guideline: str
+    business_type: str | None = None
+    error_code: str | None = None
+
+
+class ManualModifiedEntry(BaseSchema):
+    """수정된 메뉴얼 항목 정보."""
+
+    logical_key: str
+    before: ManualDiffEntrySnapshot
+    after: ManualDiffEntrySnapshot
+    changed_fields: list[str]
+
+
+class ManualVersionDiffResponse(BaseSchema):
+    """버전 간 메뉴얼 Diff 결과."""
+
+    base_version: str | None
+    compare_version: str
+    added_entries: list[ManualDiffEntrySnapshot]
+    removed_entries: list[ManualDiffEntrySnapshot]
+    modified_entries: list[ManualModifiedEntry]
+    llm_summary: str | None = None

@@ -9,11 +9,16 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 import time
+import json
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import RecordNotFoundError
+from app.core.exceptions import (
+    RecordNotFoundError,
+    ValidationError,
+    BusinessLogicError,
+)
 from app.core.logging import get_logger, log_llm_call, measure_latency, metrics_counter
 from app.llm.protocol import LLMClientProtocol
 from app.llm.prompts.manual_draft import (
@@ -23,6 +28,10 @@ from app.llm.prompts.manual_draft import (
 from app.llm.prompts.manual_compare import (
     build_manual_compare_prompt,
     SYSTEM_PROMPT as COMPARE_SYSTEM_PROMPT,
+)
+from app.llm.prompts.manual_diff import (
+    build_manual_diff_summary_prompt,
+    SYSTEM_PROMPT as DIFF_SYSTEM_PROMPT,
 )
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
 from app.models.task import ManualReviewTask, TaskStatus
@@ -41,6 +50,10 @@ from app.schemas.manual import (
     ManualSearchResult,
     ManualSearchParams,
     ManualEntryResponse,
+    ManualVersionResponse,
+    ManualVersionDiffResponse,
+    ManualDiffEntrySnapshot,
+    ManualModifiedEntry,
 )
 from app.vectorstore.protocol import VectorStoreProtocol
 from app.services.rerank import rerank_results
@@ -245,6 +258,113 @@ class ManualService:
             approved_at=next_version.created_at,
         )
 
+    async def list_versions(self, manual_group_id: str) -> list[ManualVersionResponse]:
+        """FR-14: 메뉴얼 버전 목록 조회 (현재 단일 그룹 가정)."""
+
+        versions = await self.version_repo.list_versions()
+        return [ManualVersionResponse.model_validate(v) for v in versions]
+
+    async def diff_versions(
+        self,
+        manual_group_id: str,
+        *,
+        base_version: str | None,
+        compare_version: str | None,
+        summarize: bool = False,
+    ) -> ManualVersionDiffResponse:
+        """FR-14 시나리오 A/B: 버전 간 Diff."""
+
+        base, compare = await self._resolve_versions_for_diff(
+            base_version=base_version,
+            compare_version=compare_version,
+        )
+        if compare is None:
+            raise RecordNotFoundError("비교할 버전을 찾을 수 없습니다.")
+
+        base_entries = (
+            await self.manual_repo.find_by_version(
+                base.id,
+                statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+            )
+            if base is not None
+            else []
+        )
+        compare_entries = await self.manual_repo.find_by_version(
+            compare.id,
+            statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+        )
+
+        diff = self._calculate_diff(base_entries, compare_entries)
+        summary = (
+            await self._summarize_diff(
+                diff,
+                base_version=base.version if base else None,
+                compare_version=compare.version,
+            )
+            if summarize
+            else None
+        )
+
+        return ManualVersionDiffResponse(
+            base_version=base.version if base else None,
+            compare_version=compare.version,
+            added_entries=diff["added_entries"],
+            removed_entries=diff["removed_entries"],
+            modified_entries=diff["modified_entries"],
+            llm_summary=summary,
+        )
+
+    async def diff_draft_with_active(
+        self,
+        draft_id: UUID,
+        *,
+        summarize: bool = False,
+    ) -> ManualVersionDiffResponse:
+        """FR-14 시나리오 C: 운영 버전 vs 특정 DRAFT 세트 비교."""
+
+        draft_entry = await self.manual_repo.get_by_id(draft_id)
+        if draft_entry is None:
+            raise RecordNotFoundError(f"Draft manual(id={draft_id}) not found")
+        if draft_entry.status != ManualStatus.DRAFT:
+            raise BusinessLogicError("draft_id는 DRAFT 상태 메뉴얼이어야 합니다.")
+
+        active_version = await self.version_repo.get_latest_version()
+        if active_version is None:
+            raise RecordNotFoundError("활성화된 APPROVED 버전이 없습니다.")
+
+        base_entries = await self.manual_repo.find_by_version(
+            active_version.id,
+            statuses={ManualStatus.APPROVED},
+        )
+        related_drafts = await self.manual_repo.find_by_consultation_id(
+            draft_entry.source_consultation_id
+        )
+        draft_entries = [e for e in related_drafts if e.status == ManualStatus.DRAFT]
+        if not draft_entries:
+            draft_entries = [draft_entry]
+
+        compare_entries = self._apply_drafts_to_base(base_entries, draft_entries)
+        diff = self._calculate_diff(base_entries, compare_entries)
+
+        summary = (
+            await self._summarize_diff(
+                diff,
+                base_version=active_version.version,
+                compare_version="DRAFT",
+            )
+            if summarize
+            else None
+        )
+
+        return ManualVersionDiffResponse(
+            base_version=active_version.version,
+            compare_version="DRAFT",
+            added_entries=diff["added_entries"],
+            removed_entries=diff["removed_entries"],
+            modified_entries=diff["modified_entries"],
+            llm_summary=summary,
+        )
+
     async def _call_llm_for_draft(
         self,
         *,
@@ -351,6 +471,192 @@ class ManualService:
             else:
                 diff_text = str(result)
         return result if isinstance(result, dict) else None, diff_text
+
+    async def _summarize_diff(
+        self,
+        diff: dict[str, list],
+        *,
+        base_version: str | None,
+        compare_version: str,
+    ) -> str | None:
+        """Diff JSON을 LLM을 통해 자연어 요약 (환각 방지 프롬프트 사용)."""
+
+        payload = {
+            "base_version": base_version,
+            "compare_version": compare_version,
+            "added_entries": [entry.model_dump() for entry in diff["added_entries"]],
+            "removed_entries": [
+                entry.model_dump() for entry in diff["removed_entries"]
+            ],
+            "modified_entries": [
+                entry.model_dump() for entry in diff["modified_entries"]
+            ],
+        }
+        prompt = build_manual_diff_summary_prompt(
+            diff_json=json.dumps(payload, ensure_ascii=False)
+        )
+        start = time.perf_counter()
+        try:
+            response = await self.llm_client.complete(
+                prompt=prompt,
+                system_prompt=DIFF_SYSTEM_PROMPT,
+                temperature=0.0,
+                max_tokens=400,
+            )
+            latency_ms = (time.perf_counter() - start) * 1000
+            log_llm_call(
+                operation="manual_diff_summary",
+                model=getattr(self.llm_client, "model", None),
+                latency_ms=latency_ms,
+                tokens=None,
+            )
+            return response.content.strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("manual_diff_summary_failed", error=str(exc))
+            latency_ms = (time.perf_counter() - start) * 1000
+            log_llm_call(
+                operation="manual_diff_summary",
+                model=getattr(self.llm_client, "model", None),
+                latency_ms=latency_ms,
+                tokens=None,
+                error=str(exc),
+            )
+            return None
+
+    def _calculate_diff(
+        self,
+        base_entries: list[ManualEntry],
+        compare_entries: list[ManualEntry],
+    ) -> dict[str, list]:
+        """ManualEntry 목록을 비교해 added/removed/modified를 구한다."""
+
+        base_map = {self._logical_key(entry): entry for entry in base_entries}
+        compare_map = {self._logical_key(entry): entry for entry in compare_entries}
+
+        added_entries = [
+            self._to_snapshot(entry, logical_key=key)
+            for key, entry in compare_map.items()
+            if key not in base_map
+        ]
+
+        removed_entries = [
+            self._to_snapshot(entry, logical_key=key)
+            for key, entry in base_map.items()
+            if key not in compare_map
+        ]
+
+        modified_entries: list[ManualModifiedEntry] = []
+        for key, entry in compare_map.items():
+            if key not in base_map:
+                continue
+            changed_fields = self._diff_fields(base_map[key], entry)
+            if changed_fields:
+                modified_entries.append(
+                    ManualModifiedEntry(
+                        logical_key=key,
+                        before=self._to_snapshot(base_map[key], logical_key=key),
+                        after=self._to_snapshot(entry, logical_key=key),
+                        changed_fields=changed_fields,
+                    )
+                )
+
+        return {
+            "added_entries": added_entries,
+            "removed_entries": removed_entries,
+            "modified_entries": modified_entries,
+        }
+
+    def _apply_drafts_to_base(
+        self,
+        base_entries: list[ManualEntry],
+        draft_entries: list[ManualEntry],
+    ) -> list[ManualEntry]:
+        """기존 승인 세트에 드래프트 변경분을 덮어씌운 후보 세트를 만든다."""
+
+        merged = {self._logical_key(entry): entry for entry in base_entries}
+        for draft in draft_entries:
+            merged[self._logical_key(draft)] = draft
+        return list(merged.values())
+
+    def _logical_key(self, entry: ManualEntry) -> str:
+        """업무구분/에러코드 기반 논리 키 생성 (없으면 topic까지 포함)."""
+
+        business = entry.business_type or "default"
+        error = entry.error_code or "none"
+        topic_part = (entry.topic or "").strip().lower()
+        if entry.business_type is None and entry.error_code is None and topic_part:
+            return f"{business}::{error}::{topic_part}"
+        return f"{business}::{error}"
+
+    def _to_snapshot(
+        self,
+        entry: ManualEntry,
+        *,
+        logical_key: str | None = None,
+    ) -> ManualDiffEntrySnapshot:
+        return ManualDiffEntrySnapshot(
+            logical_key=logical_key or self._logical_key(entry),
+            keywords=list(entry.keywords or []),
+            topic=entry.topic,
+            background=entry.background,
+            guideline=entry.guideline,
+            business_type=entry.business_type,
+            error_code=entry.error_code,
+        )
+
+    def _diff_fields(self, base: ManualEntry, compare: ManualEntry) -> list[str]:
+        """변경된 필드 목록 계산."""
+
+        changed: list[str] = []
+        fields = ("keywords", "topic", "background", "guideline")
+        for field in fields:
+            before = getattr(base, field, None)
+            after = getattr(compare, field, None)
+            if field == "keywords":
+                before = list(before or [])
+                after = list(after or [])
+            if before != after:
+                changed.append(field)
+        return changed
+
+    async def _resolve_versions_for_diff(
+        self,
+        *,
+        base_version: str | None,
+        compare_version: str | None,
+    ) -> tuple[ManualVersion | None, ManualVersion | None]:
+        """Diff 시나리오별 base/compare 버전 결정."""
+
+        if compare_version and base_version is None:
+            raise ValidationError("compare_version을 사용할 때는 base_version을 함께 지정하세요.")
+
+        if base_version and compare_version:
+            base = await self.version_repo.get_by_version(base_version)
+            compare = await self.version_repo.get_by_version(compare_version)
+            if base is None:
+                raise RecordNotFoundError(f"Base version {base_version} not found")
+            if compare is None:
+                raise RecordNotFoundError(f"Compare version {compare_version} not found")
+            return base, compare
+
+        if base_version and compare_version is None:
+            base = await self.version_repo.get_by_version(base_version)
+            if base is None:
+                raise RecordNotFoundError(f"Base version {base_version} not found")
+            latest = await self.version_repo.get_latest_version()
+            if latest is None:
+                raise RecordNotFoundError("비교할 최신 버전이 없습니다.")
+            if latest.id == base.id:
+                versions = await self.version_repo.list_versions(limit=2)
+                if len(versions) < 2:
+                    raise ValidationError("동일 버전을 비교할 수 없습니다. 다른 버전을 지정하세요.")
+                return versions[1], versions[0]
+            return base, latest
+
+        versions = await self.version_repo.list_versions(limit=2)
+        if len(versions) < 2:
+            raise ValidationError("최신/직전 비교를 위해 최소 2개 버전이 필요합니다.")
+        return versions[1], versions[0]
 
     def _next_version_number(self, latest: ManualVersion | None) -> int:
         if latest is None:

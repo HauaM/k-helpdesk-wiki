@@ -48,10 +48,13 @@ class Settings(BaseSettings):
     pgvector_table_manual: str = "manual_vectors"
 
     # LLM Configuration
-    llm_provider: Literal["openai", "anthropic", "mock"] = "mock"
+    llm_provider: Literal["openai", "anthropic", "mock", "ollama"] = "mock"
     llm_model: str = "gpt-4-turbo-preview"
     llm_temperature: float = 0.3
     llm_max_tokens: int = 2000
+
+    # Ollama
+    ollama_base_url: str = "http://localhost:11434"
 
     # API Keys (loaded from environment)
     openai_api_key: str | None = None

@@ -91,6 +91,8 @@ async def search_consultations(
             "branch_code": params.branch_code,
             "business_type": params.business_type,
             "error_code": params.error_code,
+            "start_date": params.start_date,
+            "end_date": params.end_date,
         },
     )
     results = await service.search_consultations(request)

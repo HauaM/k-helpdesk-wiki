@@ -9,6 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
+from app.core.exceptions import (
+    RecordNotFoundError,
+    ValidationError,
+    BusinessLogicError,
+)
 from app.schemas.manual import (
     ManualApproveRequest,
     ManualDraftCreateFromConsultationRequest,
@@ -18,6 +23,8 @@ from app.schemas.manual import (
     ManualVersionInfo,
     ManualReviewTaskResponse,
     ManualSearchResult,
+    ManualVersionResponse,
+    ManualVersionDiffResponse,
 )
 from app.services.manual_service import ManualService
 from app.llm.factory import get_llm_client_instance
@@ -81,6 +88,83 @@ async def approve_manual(
     """FR-4/FR-5: 메뉴얼 승인 및 전체 버전 세트 관리."""
 
     return await service.approve_manual(manual_id, payload)
+
+
+@router.get(
+    "/{manual_group_id}/versions",
+    response_model=list[ManualVersionResponse],
+    summary="List manual versions",
+)
+async def list_versions(
+    manual_group_id: str,
+    service: ManualService = Depends(get_manual_service),
+) -> list[ManualVersionResponse]:
+    """FR-14: 버전 목록 조회 (단일 그룹 가정)."""
+
+    try:
+        return await service.list_versions(manual_group_id)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+
+
+@router.get(
+    "/{manual_group_id}/diff",
+    response_model=ManualVersionDiffResponse,
+    summary="Diff manual versions",
+)
+async def diff_manual_versions(
+    manual_group_id: str,
+    base_version: str | None = None,
+    compare_version: str | None = None,
+    summarize: bool = False,
+    service: ManualService = Depends(get_manual_service),
+) -> ManualVersionDiffResponse:
+    """FR-14: 최신/임의 버전 간 Diff."""
+
+    try:
+        return await service.diff_versions(
+            manual_group_id,
+            base_version=base_version,
+            compare_version=compare_version,
+            summarize=summarize,
+        )
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+
+@router.get(
+    "/drafts/{draft_id}/diff-with-active",
+    response_model=ManualVersionDiffResponse,
+    summary="Diff draft set with active version",
+)
+async def diff_draft_with_active(
+    draft_id: UUID,
+    summarize: bool = False,
+    service: ManualService = Depends(get_manual_service),
+) -> ManualVersionDiffResponse:
+    """FR-14: 운영 버전 vs 특정 DRAFT 세트 Diff."""
+
+    try:
+        return await service.diff_draft_with_active(
+            draft_id,
+            summarize=summarize,
+        )
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except (BusinessLogicError, ValidationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
 
 
 @router.get(

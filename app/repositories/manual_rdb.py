@@ -85,6 +85,28 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def find_by_version(
+        self,
+        version_id: UUID,
+        *,
+        statuses: set[ManualStatus] | None = None,
+    ) -> Sequence[ManualEntry]:
+        """
+        Find manual entries that belong to a specific version.
+
+        Args:
+            version_id: ManualVersion UUID
+            statuses: Optional status filter set
+
+        Returns:
+            List of manual entries for the version
+        """
+        stmt = select(ManualEntry).where(ManualEntry.version_id == version_id)
+        if statuses:
+            stmt = stmt.where(ManualEntry.status.in_(list(statuses)))
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     # TODO: Add more query methods
     # async def find_approved_by_keywords(...)
     # async def deprecate_entry(...)
@@ -109,8 +131,23 @@ class ManualVersionRepository(BaseRepository[ManualVersion]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    # TODO: Add version increment logic
-    # async def create_next_version(...)
+    async def get_by_version(self, version: str) -> ManualVersion | None:
+        """
+        Get ManualVersion by version string
+        """
+        stmt = select(ManualVersion).where(ManualVersion.version == version)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_versions(self, limit: int | None = None) -> Sequence[ManualVersion]:
+        """
+        List manual versions ordered by creation time (desc)
+        """
+        stmt = select(ManualVersion).order_by(ManualVersion.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
 
 
 class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):

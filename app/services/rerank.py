@@ -6,7 +6,7 @@ Vector 유사도 점수에 도메인 메타(업무/에러)와 최신성 가중�
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 
@@ -19,6 +19,14 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(str(value))
     except Exception:  # noqa: BLE001
         return None
+
+
+def _to_utc(dt: datetime) -> datetime:
+    """Return an aware datetime in UTC."""
+
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def rerank_results(
@@ -49,6 +57,7 @@ def rerank_results(
     half_life_days = float(recency_cfg.get("half_life_days", 30))
 
     reranked: list[dict] = []
+    now_utc = datetime.now(timezone.utc)
 
     for result in results:
         metadata = result.get("metadata") or {}
@@ -63,10 +72,13 @@ def rerank_results(
         recency_bonus = 0.0
         created_at = _parse_datetime(metadata.get("created_at"))
         if created_at:
-            age_days = max((datetime.utcnow() - created_at).days, 0)
+            created_at_utc = _to_utc(created_at)
+            age_days = max((now_utc - created_at_utc).total_seconds() / 86400, 0.0)
             recency_bonus = recency_weight / (1 + age_days / max(half_life_days, 1))
 
         final_score = base_score + domain_bonus + recency_bonus
+        # Clamp to valid [0,1] range expected by schemas
+        final_score = max(0.0, min(final_score, 1.0))
 
         reranked.append({
             **result,

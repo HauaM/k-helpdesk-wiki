@@ -49,6 +49,14 @@ class ConsultationSearchFilters(BaseSchema):
     branch_code: str | None = Field(default=None, max_length=50)
     business_type: str | None = Field(default=None, max_length=50)
     error_code: str | None = Field(default=None, max_length=50)
+    start_date: datetime | None = Field(
+        default=None,
+        description="조회 시작 시각 (created_at 이상)",
+    )
+    end_date: datetime | None = Field(
+        default=None,
+        description="조회 종료 시각 (created_at 이하)",
+    )
 
 
 class ConsultationUpdate(BaseSchema):
@@ -83,6 +91,12 @@ class ConsultationSearchParams(BaseSchema):
     branch_code: str | None = Field(default=None, description="Filter by branch")
     business_type: str | None = Field(default=None, description="Filter by business type")
     error_code: str | None = Field(default=None, description="Filter by error code")
+    start_date: datetime | None = Field(
+        default=None, description="Filter by created_at >= start_date"
+    )
+    end_date: datetime | None = Field(
+        default=None, description="Filter by created_at <= end_date"
+    )
     top_k: int = Field(default=10, ge=1, le=50, description="Number of results")
     similarity_threshold: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Minimum similarity score"

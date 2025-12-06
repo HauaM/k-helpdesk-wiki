@@ -90,14 +90,21 @@ class MockVectorStore:
                 # Simple keyword matching (not real vector similarity)
                 text_lower = text.lower()
 
-                # Count matching words as a simple similarity metric
+                # Simple substring + word-overlap matching
+                substring_score = 0.0
+                if query_lower in text_lower:
+                    substring_score = min(len(query_lower) / max(len(text_lower), 1), 1.0)
+
                 query_words = set(query_lower.split())
                 text_words = set(text_lower.split())
                 matches = len(query_words & text_words)
 
+                overlap_score = 0.0
                 if matches > 0:
-                    # Normalize score to 0-1 range
-                    score = min(matches / len(query_words), 1.0)
+                    overlap_score = min(matches / len(query_words), 1.0)
+
+                score = max(substring_score, overlap_score)
+                if score > 0:
                     results.append(
                         VectorSearchResult(id=doc_id, score=score, metadata=metadata)
                     )
