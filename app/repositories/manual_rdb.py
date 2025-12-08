@@ -66,6 +66,29 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
         id_to_manual = {m.id: m for m in manuals}
         return [id_to_manual[id] for id in ids if id in id_to_manual]
 
+    async def list_entries(
+        self,
+        *,
+        statuses: set[ManualStatus] | None = None,
+        limit: int = 100,
+    ) -> Sequence[ManualEntry]:
+        """
+        List manual entries with optional status filter.
+
+        Args:
+            statuses: Optional set of statuses to filter
+            limit: Maximum number of results
+
+        Returns:
+            Ordered list of manual entries
+        """
+        stmt = select(ManualEntry)
+        if statuses:
+            stmt = stmt.where(ManualEntry.status.in_(list(statuses)))
+        stmt = stmt.order_by(ManualEntry.created_at.desc()).limit(limit)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def find_by_consultation_id(
         self,
         consultation_id: UUID,
@@ -102,6 +125,35 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
             List of manual entries for the version
         """
         stmt = select(ManualEntry).where(ManualEntry.version_id == version_id)
+        if statuses:
+            stmt = stmt.where(ManualEntry.status.in_(list(statuses)))
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def find_by_business_and_error(
+        self,
+        business_type: str | None,
+        error_code: str | None,
+        *,
+        statuses: set[ManualStatus] | None = None,
+    ) -> Sequence[ManualEntry]:
+        """
+        Find manual entries by business_type and error_code (manual group).
+
+        Used to find all entries that belong to the same "group" for version comparison.
+
+        Args:
+            business_type: Business type (e.g., "인터넷뱅킹")
+            error_code: Error code (e.g., "E001")
+            statuses: Optional status filter set (e.g., {ManualStatus.APPROVED})
+
+        Returns:
+            List of manual entries in the same group
+        """
+        stmt = select(ManualEntry).where(
+            ManualEntry.business_type == business_type,
+            ManualEntry.error_code == error_code,
+        )
         if statuses:
             stmt = stmt.where(ManualEntry.status.in_(list(statuses)))
         result = await self.session.execute(stmt)
@@ -186,13 +238,13 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
 
     async def find_pending_for_reviewer(
         self,
-        reviewer_id: UUID,
+        reviewer_id: str,
     ) -> Sequence[ManualReviewTask]:
         """
         Find pending tasks assigned to reviewer
 
         Args:
-            reviewer_id: Reviewer UUID
+            reviewer_id: Reviewer employee_id
 
         Returns:
             List of pending review tasks

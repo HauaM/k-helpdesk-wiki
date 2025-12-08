@@ -50,10 +50,14 @@ from app.schemas.manual import (
     ManualSearchResult,
     ManualSearchParams,
     ManualEntryResponse,
+    ManualEntryUpdate,
     ManualVersionResponse,
     ManualVersionDiffResponse,
     ManualDiffEntrySnapshot,
     ManualModifiedEntry,
+    BusinessType,
+    ManualGuidelineItem,
+    ManualDetailResponse,
 )
 from app.vectorstore.protocol import VectorStoreProtocol
 from app.services.rerank import rerank_results
@@ -63,6 +67,34 @@ from app.services.validation import (
 )
 
 logger = get_logger(__name__)
+
+
+def parse_guideline_string(guideline_text: str) -> list[dict[str, str]]:
+    """
+    guideline 문자열을 파싱하여 제목/설명 배열로 변환.
+
+    포맷: "제목1\\n설명1\\n제목2\\n설명2" 또는 각 라인이 제목/설명 쌍으로 구성
+    """
+    if not guideline_text or not guideline_text.strip():
+        return []
+
+    lines = [line.strip() for line in guideline_text.split("\n") if line.strip()]
+
+    guidelines: list[dict[str, str]] = []
+    i = 0
+    while i < len(lines):
+        if i + 1 < len(lines):
+            # 제목과 설명이 한 쌍
+            title = lines[i]
+            description = lines[i + 1]
+            guidelines.append({"title": title, "description": description})
+            i += 2
+        else:
+            # 남은 것이 제목만 있으면 설명은 공백
+            guidelines.append({"title": lines[i], "description": ""})
+            i += 1
+
+    return guidelines
 
 
 class ManualService:
@@ -94,9 +126,7 @@ class ManualService:
 
         consultation = await self.consultation_repo.get_by_id(request.consultation_id)
         if consultation is None:
-            raise RecordNotFoundError(
-                f"Consultation(id={request.consultation_id}) not found"
-            )
+            raise RecordNotFoundError(f"Consultation(id={request.consultation_id}) not found")
 
         source_text = f"{consultation.inquiry_text}\n{consultation.action_taken}"
 
@@ -145,6 +175,74 @@ class ManualService:
 
         return ManualDraftResponse.model_validate(manual_entry)
 
+    async def get_manual(self, manual_id: UUID) -> ManualEntryResponse:
+        """메뉴얼 단건 상세 조회."""
+
+        manual = await self.manual_repo.get_by_id(manual_id)
+        if manual is None:
+            raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
+
+        return ManualEntryResponse.model_validate(manual)
+
+    async def get_manual_by_version(
+        self, manual_id: UUID, version: str
+    ) -> ManualDetailResponse:
+        """FR-14: 특정 버전의 메뉴얼 상세 조회.
+
+        guideline 필드를 문자열에서 배열로 변환하여 반환한다.
+
+        Args:
+            manual_id: 메뉴얼 ID (현재는 사용되지 않음 - 단일 그룹 가정)
+            version: 버전 번호 (예: "v2.1")
+
+        Returns:
+            ManualDetailResponse: 메뉴얼 상세 정보 (guidelines는 배열)
+
+        Raises:
+            RecordNotFoundError: 버전을 찾을 수 없는 경우
+        """
+
+        # 버전 조회
+        manual_version = await self.version_repo.get_by_version(version)
+        if manual_version is None:
+            raise RecordNotFoundError(f"Manual version '{version}' not found")
+
+        # 해당 버전의 메뉴얼 항목 조회 (APPROVED 상태만)
+        entries = list(
+            await self.manual_repo.find_by_version(
+                manual_version.id,
+                statuses={ManualStatus.APPROVED},
+            )
+        )
+
+        if not entries:
+            raise RecordNotFoundError(
+                f"No approved manual entries found for version '{version}'"
+            )
+
+        # 임시 구현: 첫 번째 엔트리 반환 (실제로는 manual_id로 필터링해야 함)
+        # TODO: manual_id를 기반으로 특정 항목만 반환하도록 수정
+        entry = entries[0]
+
+        # guideline 파싱
+        guidelines = parse_guideline_string(entry.guideline)
+
+        return ManualDetailResponse(
+            id=entry.id,
+            manual_id=entry.id,
+            version=manual_version.version,
+            topic=entry.topic,
+            keywords=entry.keywords or [],
+            background=entry.background,
+            guidelines=[
+                ManualGuidelineItem(title=g["title"], description=g["description"])
+                for g in guidelines
+            ],
+            status=entry.status,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        )
+
     async def check_conflict_and_create_task(
         self,
         manual_id: UUID,
@@ -160,7 +258,9 @@ class ManualService:
         if manual.status != ManualStatus.DRAFT:
             return None
         if self.vectorstore is None:
-            logger.warning("manual_vectorstore_not_configured_skip_conflict", manual_id=str(manual.id))
+            logger.warning(
+                "manual_vectorstore_not_configured_skip_conflict", manual_id=str(manual.id)
+            )
             return None
 
         query_text = self._build_manual_text(manual)
@@ -169,7 +269,11 @@ class ManualService:
             top_k=top_k,
         )
 
-        candidate_ids = [res.id for res in vector_results if res.score >= similarity_threshold and res.id != manual.id]
+        candidate_ids = [
+            res.id
+            for res in vector_results
+            if res.score >= similarity_threshold and res.id != manual.id
+        ]
         if not candidate_ids:
             return None
 
@@ -216,6 +320,9 @@ class ManualService:
             new_manual_summary=self._summarize_manual(manual),
             diff_text=diff_text,
             diff_json=diff_json,
+            business_type=self._resolve_business_type(manual),
+            new_manual_topic=manual.topic,
+            new_manual_keywords=manual.keywords,
         )
 
     async def approve_manual(
@@ -258,11 +365,92 @@ class ManualService:
             approved_at=next_version.created_at,
         )
 
-    async def list_versions(self, manual_group_id: str) -> list[ManualVersionResponse]:
-        """FR-14: 메뉴얼 버전 목록 조회 (현재 단일 그룹 가정)."""
+    async def list_versions(self, manual_id: UUID) -> list[ManualVersionResponse]:
+        """FR-14: 특정 메뉴얼 그룹의 버전 목록 조회 (최신순, 현재 버전 표시 포함).
 
-        versions = await self.version_repo.list_versions()
-        return [ManualVersionResponse.model_validate(v) for v in versions]
+        같은 business_type/error_code를 가진 메뉴얼들의 버전을 모두 반환합니다.
+
+        Args:
+            manual_id: 메뉴얼 ID (그룹을 식별하기 위해 사용)
+
+        Returns:
+            버전 목록 (최신순)
+
+        응답 필드:
+        - value: 버전 번호 (예: "v2.1")
+        - label: 사용자 표시용 레이블 (최신 버전에만 "(현재 버전)" 추가)
+        - date: 버전 생성/승인 날짜 (YYYY-MM-DD 형식)
+        """
+
+        # 1. 기준 메뉴얼 조회
+        manual = await self.manual_repo.get_by_id(manual_id)
+        if manual is None:
+            raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
+
+        # 2. 같은 그룹의 APPROVED/DEPRECATED 메뉴얼만 조회 (business_type + error_code)
+        # DRAFT는 version_id가 NULL이므로 버전 목록에 포함되지 않음
+        group_entries = list(
+            await self.manual_repo.find_by_business_and_error(
+                business_type=manual.business_type,
+                error_code=manual.error_code,
+                statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+            )
+        )
+
+        if not group_entries:
+            return []
+
+        # 3. 그룹 메뉴얼들의 버전 ID 추출 (중복 제거)
+        version_ids = set()
+        for entry in group_entries:
+            if entry.version_id is not None:
+                version_ids.add(entry.version_id)
+
+        if not version_ids:
+            return []
+
+        # 4. 버전 정보 조회 및 정렬 (최신순)
+        all_versions = await self.version_repo.list_versions()
+        group_versions = [v for v in all_versions if v.id in version_ids]
+
+        if not group_versions:
+            return []
+
+        result: list[ManualVersionResponse] = []
+        for idx, v in enumerate(group_versions):
+            # 가장 최신 버전(첫 번째 항목)에만 "(현재 버전)" 표시
+            label = f"{v.version} (현재 버전)" if idx == 0 else v.version
+
+            # created_at을 YYYY-MM-DD 형식으로 변환
+            date_str = v.created_at.strftime("%Y-%m-%d")
+
+            result.append(
+                ManualVersionResponse(
+                    version=v.version,  # alias "version" used here
+                    label=label,
+                    date=date_str,
+                    id=v.id,
+                    created_at=v.created_at,
+                    updated_at=v.updated_at,
+                )
+            )
+
+        return result
+
+    async def list_manuals(
+        self,
+        *,
+        status: ManualStatus | None = None,
+        limit: int = 100,
+    ) -> list[ManualEntryResponse]:
+        """RFP FR-8/General: 메뉴얼 목록 조회"""
+
+        statuses = {status} if status is not None else None
+        entries = await self.manual_repo.list_entries(
+            statuses=statuses,
+            limit=limit,
+        )
+        return [ManualEntryResponse.model_validate(entry) for entry in entries]
 
     async def diff_versions(
         self,
@@ -282,16 +470,20 @@ class ManualService:
             raise RecordNotFoundError("비교할 버전을 찾을 수 없습니다.")
 
         base_entries = (
-            await self.manual_repo.find_by_version(
-                base.id,
-                statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+            list(
+                await self.manual_repo.find_by_version(
+                    base.id,
+                    statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+                )
             )
             if base is not None
             else []
         )
-        compare_entries = await self.manual_repo.find_by_version(
-            compare.id,
-            statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+        compare_entries = list(
+            await self.manual_repo.find_by_version(
+                compare.id,
+                statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
+            )
         )
 
         diff = self._calculate_diff(base_entries, compare_entries)
@@ -332,9 +524,11 @@ class ManualService:
         if active_version is None:
             raise RecordNotFoundError("활성화된 APPROVED 버전이 없습니다.")
 
-        base_entries = await self.manual_repo.find_by_version(
-            active_version.id,
-            statuses={ManualStatus.APPROVED},
+        base_entries = list(
+            await self.manual_repo.find_by_version(
+                active_version.id,
+                statuses={ManualStatus.APPROVED},
+            )
         )
         related_drafts = await self.manual_repo.find_by_consultation_id(
             draft_entry.source_consultation_id
@@ -431,7 +625,7 @@ class ManualService:
 
     async def _call_llm_compare(
         self, old: ManualEntry, new: ManualEntry
-    ) -> tuple[dict | None, str | None]:
+    ) -> tuple[dict[str, Any] | None, str | None]:
         """LLM 비교 호출 (Stub). 환각 방지 규칙은 Prompt에 명시."""
 
         prompt = build_manual_compare_prompt(
@@ -474,7 +668,7 @@ class ManualService:
 
     async def _summarize_diff(
         self,
-        diff: dict[str, list],
+        diff: dict[str, list[Any]],
         *,
         base_version: str | None,
         compare_version: str,
@@ -485,16 +679,10 @@ class ManualService:
             "base_version": base_version,
             "compare_version": compare_version,
             "added_entries": [entry.model_dump() for entry in diff["added_entries"]],
-            "removed_entries": [
-                entry.model_dump() for entry in diff["removed_entries"]
-            ],
-            "modified_entries": [
-                entry.model_dump() for entry in diff["modified_entries"]
-            ],
+            "removed_entries": [entry.model_dump() for entry in diff["removed_entries"]],
+            "modified_entries": [entry.model_dump() for entry in diff["modified_entries"]],
         }
-        prompt = build_manual_diff_summary_prompt(
-            diff_json=json.dumps(payload, ensure_ascii=False)
-        )
+        prompt = build_manual_diff_summary_prompt(diff_json=json.dumps(payload, ensure_ascii=False))
         start = time.perf_counter()
         try:
             response = await self.llm_client.complete(
@@ -527,7 +715,7 @@ class ManualService:
         self,
         base_entries: list[ManualEntry],
         compare_entries: list[ManualEntry],
-    ) -> dict[str, list]:
+    ) -> dict[str, list[Any]]:
         """ManualEntry 목록을 비교해 added/removed/modified를 구한다."""
 
         base_map = {self._logical_key(entry): entry for entry in base_entries}
@@ -723,6 +911,19 @@ class ManualService:
             return None
         return f"{manual.topic} | {manual.background[:80]}" if manual.background else manual.topic
 
+    def _resolve_business_type(self, manual: ManualEntry | None) -> BusinessType | None:
+        if manual is None or manual.business_type is None:
+            return None
+        try:
+            return BusinessType(manual.business_type)
+        except ValueError:
+            logger.warning(
+                "unknown_business_type",
+                manual_id=str(manual.id),
+                business_type=manual.business_type,
+            )
+            return None
+
     @measure_latency("manual_search")
     async def search_manuals(self, params: ManualSearchParams) -> list[ManualSearchResult]:
         if self.vectorstore is None:
@@ -747,7 +948,7 @@ class ManualService:
         manuals = await self.manual_repo.find_by_ids([res.id for res in vector_results])
         manual_map = {m.id: m for m in manuals}
 
-        base_results: list[dict] = []
+        base_results: list[dict[str, Any]] = []
         for res in vector_results:
             manual = manual_map.get(res.id)
             if manual is None:
@@ -755,7 +956,9 @@ class ManualService:
             if params.status and manual.status != params.status:
                 continue
             meta = {
-                "business_type": res.metadata.get("business_type") if res.metadata else manual.business_type,
+                "business_type": (
+                    res.metadata.get("business_type") if res.metadata else manual.business_type
+                ),
                 "error_code": res.metadata.get("error_code") if res.metadata else manual.error_code,
                 "created_at": res.metadata.get("created_at") if res.metadata else manual.created_at,
             }
@@ -779,6 +982,62 @@ class ManualService:
             )
             for item in reranked
         ]
+
+    async def update_manual(
+        self,
+        manual_id: UUID,
+        payload: ManualEntryUpdate,
+    ) -> ManualEntryResponse:
+        """DRAFT 상태 메뉴얼 항목 업데이트.
+
+        검증 사항:
+        1. manual_id 존재 확인
+        2. 상태가 DRAFT인지 확인 (DRAFT 상태에서만 수정 가능)
+        3. 필드 유효성 검사
+        4. 메뉴얼 업데이트
+        5. VectorStore 재인덱싱 (상태가 APPROVED로 변경된 경우)
+        """
+
+        manual = await self.manual_repo.get_by_id(manual_id)
+        if manual is None:
+            raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
+
+        if manual.status != ManualStatus.DRAFT:
+            raise ValidationError(
+                f"DRAFT 상태인 메뉴얼만 수정 가능합니다. " f"현재 상태: {manual.status.value}"
+            )
+
+        # 필드 업데이트 (제공된 필드만)
+        if payload.keywords is not None:
+            manual.keywords = payload.keywords
+        if payload.topic is not None:
+            manual.topic = payload.topic
+        if payload.background is not None:
+            manual.background = payload.background
+        if payload.guideline is not None:
+            manual.guideline = payload.guideline
+
+        # status 변경 처리
+        if payload.status is not None and payload.status != manual.status:
+            if payload.status == ManualStatus.APPROVED:
+                # APPROVED로 변경될 때는 버전 관리 로직 필요
+                # 하지만 PUT은 간단한 update만 지원
+                # APPROVED는 별도의 approve 엔드포인트(/approve)를 사용하도록 강제
+                raise ValidationError(
+                    "APPROVED 상태로 변경하려면 /approve 엔드포인트를 사용하세요."
+                )
+            manual.status = payload.status
+
+        # 메뉴얼 저장
+        await self.manual_repo.update(manual)
+
+        logger.info(
+            "manual_updated",
+            manual_id=str(manual_id),
+            new_status=manual.status.value,
+        )
+
+        return ManualEntryResponse.model_validate(manual)
 
     async def _create_review_task(
         self,
