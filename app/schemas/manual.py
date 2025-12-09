@@ -3,13 +3,30 @@ Manual Schemas
 Pydantic models for Manual API requests/responses
 """
 
+from __future__ import annotations
+
 from datetime import datetime
+from enum import Enum
+from typing import Any
 from uuid import UUID
-from pydantic import Field
+
+from pydantic import Field, ConfigDict
 
 from app.models.manual import ManualStatus
 from app.models.task import TaskStatus
 from app.schemas.base import BaseSchema, BaseResponseSchema
+
+
+class BusinessType(str, Enum):
+    """
+    메뉴얼 업무구분
+    """
+
+    INTERNET_BANKING = "인터넷뱅킹"
+    MOBILE_BANKING = "모바일뱅킹"
+    LOAN = "대출"
+    DEPOSIT = "예금"
+    CARD = "카드"
 
 
 class ManualEntryBase(BaseSchema):
@@ -83,12 +100,16 @@ class ManualSearchResult(BaseSchema):
 
 class ManualVersionResponse(BaseResponseSchema):
     """
-    Manual version response
+    Manual version response for version list
+
+    RFP Reference: GET /api/v1/manuals/{manual_id}/versions
     """
 
-    version: str
-    description: str | None
-    changelog: dict | None
+    model_config = ConfigDict(populate_by_name=True)
+
+    value: str = Field(alias="version", description="버전 번호 (예: v2.1)")
+    label: str = Field(description="사용자 표시용 레이블 (버전 + 현재 버전 여부)")
+    date: str = Field(description="버전 생성/승인 날짜 (YYYY-MM-DD 형식)")
 
 
 class ManualReviewTaskResponse(BaseResponseSchema):
@@ -102,12 +123,24 @@ class ManualReviewTaskResponse(BaseResponseSchema):
     new_entry_id: UUID
     similarity: float
     status: TaskStatus
-    reviewer_id: UUID | None
+    reviewer_id: str | None
     review_notes: str | None
     old_manual_summary: str | None = Field(default=None, description="기존 메뉴얼 요약")
     new_manual_summary: str | None = Field(default=None, description="신규 초안 요약")
     diff_text: str | None = Field(default=None, description="LLM 비교 결과 요약")
-    diff_json: dict | None = Field(default=None, description="LLM 비교 결과 JSON")
+    diff_json: dict[str, Any] | None = Field(default=None, description="LLM 비교 결과 JSON")
+    business_type: BusinessType | None = Field(
+        default=None,
+        description="신규 초안(new_entry)의 업무구분 (인터넷뱅킹, 모바일뱅킹, 대출, 예금, 카드)",
+    )
+    new_manual_topic: str | None = Field(
+        default=None,
+        description="신규 초안(new_entry)의 주제",
+    )
+    new_manual_keywords: list[str] | None = Field(
+        default=None,
+        description="신규 초안(new_entry)의 키워드",
+    )
 
     # TODO: Optionally include full manual entries for comparison
     # old_entry: ManualEntryResponse | None
@@ -121,7 +154,7 @@ class ManualReviewApproval(BaseSchema):
     RFP Reference: POST /tasks/manual-review/{id}/approve
     """
 
-    reviewer_id: UUID
+    employee_id: str
     review_notes: str | None = None
     create_new_version: bool = Field(
         default=True, description="Create new manual version"
@@ -162,7 +195,7 @@ class ManualDraftResponse(BaseResponseSchema):
 class ManualApproveRequest(BaseSchema):
     """FR-4: 메뉴얼 승인 요청."""
 
-    approver_id: UUID
+    approver_id: str
     notes: str | None = Field(default=None, description="승인 메모")
 
 
@@ -203,3 +236,27 @@ class ManualVersionDiffResponse(BaseSchema):
     removed_entries: list[ManualDiffEntrySnapshot]
     modified_entries: list[ManualModifiedEntry]
     llm_summary: str | None = None
+
+
+class ManualGuidelineItem(BaseSchema):
+    """메뉴얼 가이드라인 항목."""
+
+    title: str = Field(description="조치사항 제목")
+    description: str = Field(description="조치사항 설명")
+
+
+class ManualDetailResponse(BaseResponseSchema):
+    """
+    Manual detail response for specific version
+
+    RFP Reference: GET /api/v1/manuals/{manual_id}/versions/{version}
+    """
+
+    manual_id: UUID = Field(description="메뉴얼 ID")
+    version: str = Field(description="버전 번호")
+    topic: str = Field(description="메뉴얼 주제")
+    keywords: list[str] = Field(description="키워드 배열")
+    background: str = Field(description="배경 정보")
+    guidelines: list[ManualGuidelineItem] = Field(description="조치사항/가이드라인 배열")
+    status: ManualStatus = Field(description="메뉴얼 상태 (APPROVED, DEPRECATED)")
+    updated_at: datetime = Field(description="업데이트 시간 (ISO 8601)")

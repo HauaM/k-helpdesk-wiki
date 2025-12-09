@@ -643,7 +643,7 @@ class CommonCodeService:
         return CommonCodeGroupSimpleResponse(
             group_code=group_code,
             items=[
-                CommonCodeSimpleResponse(code_key=item.code_key, code_value=item.code_value)
+                CommonCodeSimpleResponse(code_key=item.code_key, code_value=item.code_value, sort_order=item.sort_order)
                 for item in items
             ] if items else []
         )

@@ -257,14 +257,30 @@ class CommonCodeItemRepository(BaseRepository[CommonCodeItem]):
         Returns:
             CommonCodeItem 또는 None
         """
-        stmt = select(CommonCodeItem).where(
-            and_(
-                CommonCodeItem.group_id == group_id,
-                CommonCodeItem.code_key == code_key,
-            )
+        # Use raw SQL due to SQLAlchemy ORM metadata caching issues
+        from sqlalchemy import text
+
+        group_id_str = str(group_id)
+        sql = "SELECT * FROM common_code_items WHERE group_id = :group_id AND code_key = :code_key LIMIT 1"
+        params = {"group_id": group_id_str, "code_key": code_key}
+        result = await self.session.execute(text(sql), params)
+
+        row = result.mappings().first()
+        if not row:
+            return None
+
+        item = CommonCodeItem(
+            id=row['id'],
+            group_id=row['group_id'],
+            code_key=row['code_key'],
+            code_value=row['code_value'],
+            sort_order=row['sort_order'],
+            is_active=row['is_active'],
+            attributes=row['attributes'],
+            created_at=row['created_at'],
+            updated_at=row['updated_at'],
         )
-        result = await self.session.execute(stmt)
-        return result.scalars().first()
+        return item
 
     async def get_by_id_or_raise(self, id: UUID) -> CommonCodeItem:
         """
@@ -298,16 +314,18 @@ class CommonCodeItemRepository(BaseRepository[CommonCodeItem]):
         Returns:
             True면 중복 존재
         """
-        conditions = [
-            CommonCodeItem.group_id == group_id,
-            CommonCodeItem.code_key == code_key,
-        ]
+        # Use raw SQL due to SQLAlchemy ORM metadata caching issues
+        from sqlalchemy import text
+
+        group_id_str = str(group_id)
+        sql = "SELECT COUNT(*) FROM common_code_items WHERE group_id = :group_id AND code_key = :code_key"
+        params = {"group_id": group_id_str, "code_key": code_key}
 
         if exclude_id:
-            conditions.append(CommonCodeItem.id != exclude_id)
+            sql += " AND id != :exclude_id"
+            params["exclude_id"] = str(exclude_id)
 
-        stmt = select(func.count()).select_from(CommonCodeItem).where(and_(*conditions))
-        result = await self.session.execute(stmt)
+        result = await self.session.execute(text(sql), params)
         count = result.scalars().first() or 0
         return count > 0
 
@@ -321,13 +339,15 @@ class CommonCodeItemRepository(BaseRepository[CommonCodeItem]):
         Returns:
             항목 개수
         """
-        stmt = (
-            select(func.count())
-            .select_from(CommonCodeItem)
-            .where(CommonCodeItem.group_id == group_id)
-        )
-        result = await self.session.execute(stmt)
-        return result.scalars().first() or 0
+        # Use raw SQL due to SQLAlchemy ORM metadata caching issues
+        from sqlalchemy import text
+
+        group_id_str = str(group_id)
+        sql = "SELECT COUNT(*) FROM common_code_items WHERE group_id = :group_id"
+        params = {"group_id": group_id_str}
+        result = await self.session.execute(text(sql), params)
+        count = result.scalars().first()
+        return count or 0
 
     async def delete_by_group_id(self, group_id: UUID) -> int:
         """
@@ -339,16 +359,14 @@ class CommonCodeItemRepository(BaseRepository[CommonCodeItem]):
         Returns:
             삭제된 항목 수
         """
-        # Note: Cascade delete는 SQLAlchemy에서 자동 처리되지만,
-        # 명시적으로 삭제하려면 이 메서드 사용
-        stmt = select(CommonCodeItem).where(CommonCodeItem.group_id == group_id)
-        result = await self.session.execute(stmt)
-        items = result.scalars().all()
+        # Use raw SQL due to SQLAlchemy ORM metadata caching issues
+        from sqlalchemy import text
 
-        for item in items:
-            await self.session.delete(item)
-
-        return len(items)
+        group_id_str = str(group_id)
+        sql = "DELETE FROM common_code_items WHERE group_id = :group_id"
+        params = {"group_id": group_id_str}
+        result = await self.session.execute(text(sql), params)
+        return result.rowcount
 
     async def update_sort_order(self, id: UUID, sort_order: int) -> CommonCodeItem:
         """

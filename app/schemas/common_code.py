@@ -204,6 +204,7 @@ class CommonCodeSimpleResponse(BaseSchema):
 
     code_key: str = Field(description="코드 키")
     code_value: str = Field(description="코드 값/표시명")
+    sort_order: int = Field(description="정렬 순서")
 
 
 class CommonCodeGroupSimpleResponse(BaseSchema):

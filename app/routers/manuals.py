@@ -14,17 +14,20 @@ from app.core.exceptions import (
     ValidationError,
     BusinessLogicError,
 )
+from app.models.manual import ManualStatus
 from app.schemas.manual import (
     ManualApproveRequest,
     ManualDraftCreateFromConsultationRequest,
     ManualDraftResponse,
     ManualEntryResponse,
+    ManualEntryUpdate,
     ManualSearchParams,
     ManualVersionInfo,
     ManualReviewTaskResponse,
     ManualSearchResult,
     ManualVersionResponse,
     ManualVersionDiffResponse,
+    ManualDetailResponse,
 )
 from app.services.manual_service import ManualService
 from app.llm.factory import get_llm_client_instance
@@ -91,22 +94,56 @@ async def approve_manual(
 
 
 @router.get(
-    "/{manual_group_id}/versions",
+    "/{manual_id}/versions",
     response_model=list[ManualVersionResponse],
     summary="List manual versions",
 )
 async def list_versions(
-    manual_group_id: str,
+    manual_id: UUID,
     service: ManualService = Depends(get_manual_service),
 ) -> list[ManualVersionResponse]:
-    """FR-14: 버전 목록 조회 (단일 그룹 가정)."""
+    """FR-14: 메뉴얼 그룹의 버전 목록 조회.
+
+    특정 메뉴얼(manual_id)과 같은 business_type/error_code를 가진 메뉴얼 그룹의
+    모든 버전을 최신순으로 반환합니다.
+    """
 
     try:
-        return await service.list_versions(manual_group_id)
+        return await service.list_versions(manual_id)
     except RecordNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{manual_id}/versions/{version}",
+    response_model=ManualDetailResponse,
+    summary="Get manual detail by version",
+)
+async def get_manual_by_version(
+    manual_id: UUID,
+    version: str,
+    service: ManualService = Depends(get_manual_service),
+) -> ManualDetailResponse:
+    """FR-14: 특정 버전의 메뉴얼 상세 조회.
+
+    특정 버전의 메뉴얼 상세 정보를 반환합니다.
+    guideline 필드는 문자열에서 배열로 변환되어 반환됩니다.
+
+    응답 필드:
+    - manual_id: 메뉴얼 ID
+    - version: 버전 번호
+    - topic: 메뉴얼 주제
+    - keywords: 키워드 배열
+    - background: 배경 정보
+    - guidelines: 조치사항/가이드라인 배열 (title + description)
+    - status: 메뉴얼 상태 (APPROVED, DEPRECATED)
+    - updated_at: 업데이트 시간 (ISO 8601)
+    """
+
+    try:
+        return await service.get_manual_by_version(manual_id, version)
+    except RecordNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get(
@@ -131,13 +168,9 @@ async def diff_manual_versions(
             summarize=summarize,
         )
     except RecordNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get(
@@ -158,13 +191,9 @@ async def diff_draft_with_active(
             summarize=summarize,
         )
     except RecordNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (BusinessLogicError, ValidationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get(
@@ -173,7 +202,7 @@ async def diff_draft_with_active(
     summary="List manual entries",
 )
 async def list_manuals(
-    status: str | None = None,
+    status_filter: ManualStatus | None = None,
     limit: int = 100,
     service: ManualService = Depends(get_manual_service),
 ) -> list[ManualEntryResponse]:
@@ -183,9 +212,9 @@ async def list_manuals(
     RFP Reference: GET /manuals
     TODO: Implement pagination and filtering
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Manual listing not yet implemented",
+    return await service.list_manuals(
+        status=status_filter,
+        limit=limit,
     )
 
 
@@ -197,7 +226,7 @@ async def list_manuals(
 async def search_manuals(
     params: ManualSearchParams = Depends(),
     service: ManualService = Depends(get_manual_service),
-) -> dict:
+) -> list[ManualSearchResult]:
     """
     Search manuals using vector similarity
 
@@ -205,18 +234,19 @@ async def search_manuals(
     - Vector-based semantic search
     - Filter by status, business_type, error_code
     """
-    return await service.search_manuals(params)
+    results = await service.search_manuals(params)
+    return results
 
 
 @router.post(
     "/{manual_id}/review",
-    response_model=dict,
+    response_model=dict[str, str],
     summary="Create review task for manual",
 )
 async def create_manual_review(
     manual_id: UUID,
     service: ManualService = Depends(get_manual_service),
-) -> dict:
+) -> dict[str, str]:
     """
     Create review task for manual entry
 
@@ -228,3 +258,64 @@ async def create_manual_review(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Manual review creation not yet implemented",
     )
+
+
+@router.put(
+    "/{manual_id}",
+    response_model=ManualEntryResponse,
+    summary="Update manual entry",
+)
+async def update_manual(
+    manual_id: UUID,
+    payload: ManualEntryUpdate,
+    service: ManualService = Depends(get_manual_service),
+) -> ManualEntryResponse:
+    """DRAFT 상태 메뉴얼 항목 업데이트.
+
+    요청 필드:
+    - topic: string (5-200자, 선택사항)
+    - keywords: list[string] (1-3개, 선택사항)
+    - background: string (최소 10자, 선택사항)
+    - guideline: string (줄바꿈으로 구분, 선택사항)
+    - status: DRAFT|APPROVED|DEPRECATED (선택사항, APPROVED는 /approve 사용)
+
+    응답 (200 OK):
+    메뉴얼 항목의 전체 정보
+
+    제약사항:
+    - DRAFT 상태인 메뉴얼만 수정 가능
+    - APPROVED 상태로의 변경은 /approve 엔드포인트 사용 필수
+    """
+
+    try:
+        return await service.update_manual(manual_id, payload)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{manual_id}",
+    response_model=ManualEntryResponse,
+    summary="Get manual detail",
+)
+async def get_manual_detail(
+    manual_id: UUID,
+    service: ManualService = Depends(get_manual_service),
+) -> ManualEntryResponse:
+    """메뉴얼 단건 상세 조회."""
+
+    try:
+        return await service.get_manual(manual_id)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

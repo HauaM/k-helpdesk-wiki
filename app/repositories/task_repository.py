@@ -19,7 +19,7 @@ class TaskFilter:
     """태스크 목록 조회 시 사용할 필터."""
 
     status: TaskStatus | None = None
-    reviewer_id: UUID | None = None
+    reviewer_id: str | None = None
     new_entry_id: UUID | None = None
     old_entry_id: UUID | None = None
 
@@ -35,7 +35,7 @@ class TaskRepository:
         new_entry_id: UUID,
         similarity: float,
         old_entry_id: UUID | None = None,
-        reviewer_id: UUID | None = None,
+        reviewer_id: str | None = None,
     ) -> ManualReviewTask:
         """유사 메뉴얼 검토 태스크 생성."""
 

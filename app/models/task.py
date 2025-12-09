@@ -56,7 +56,8 @@ class ManualReviewTask(BaseModel):
         default=TaskStatus.TODO,
     )
 
-    reviewer_id: Mapped[UUID | None] = mapped_column(
+    reviewer_id: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
         comment="검토자 식별자 (User 테이블과 향후 연결)",
     )
@@ -105,7 +106,8 @@ class TaskHistory(BaseModel):
         SQLEnum(TaskStatus, name="task_status", create_constraint=False),
         nullable=False,
     )
-    changed_by: Mapped[UUID | None] = mapped_column(
+    changed_by: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
         comment="상태 변경 주체",
     )

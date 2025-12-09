@@ -366,7 +366,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Reviewer as 관리자<br/>(검토자)
-    participant API as API<br/>/tasks/{id}/approve
+    participant API as API<br/>/manual-review/tasks/{id}/approve
     participant Service as TaskService
     participant ManualService as ManualService<br/>(승인 로직)
     participant ManualRepo as ManualRepository
@@ -374,7 +374,7 @@ sequenceDiagram
     participant Vector as VectorStore
     participant Consultation as ConsultationRepository
 
-    Reviewer->>API: POST /tasks/{id}/approve<br/>{reviewer_id, notes}
+    Reviewer->>API: POST /manual-review/tasks/{id}/approve<br/>{employee_id, notes}
     API->>Service: approve_task(task_id, payload)
 
     Service->>Service: _add_history()<br/>상태 변경 기록 (TODO → DONE)
@@ -723,13 +723,13 @@ curl -X POST http://localhost:8000/api/v1/manuals/draft \
 #### 매뉴얼 승인
 ```bash
 # 먼저 리뷰 태스크 목록 조회
-curl -X GET http://localhost:8000/api/v1/tasks
+curl -X GET http://localhost:8000/api/v1/manual-review/tasks
 
 # 그 다음 승인
-curl -X POST http://localhost:8000/api/v1/tasks/{task_id}/approve \
+curl -X POST http://localhost:8000/api/v1/manual-review/tasks/{task_id}/approve \
   -H "Content-Type: application/json" \
   -d '{
-    "reviewer_id": "REV001",
+    "employee_id": "EMP001",
     "review_notes": "승인합니다"
   }'
 ```

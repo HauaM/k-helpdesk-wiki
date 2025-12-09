@@ -22,6 +22,7 @@ from app.schemas.manual import (
     ManualReviewApproval,
     ManualReviewRejection,
     ManualReviewTaskResponse,
+    BusinessType,
 )
 from app.services.manual_service import ManualService
 from app.core.logging import metrics_counter
@@ -74,17 +75,22 @@ class TaskService:
         if task is None:
             raise RecordNotFoundError(f"ManualReviewTask(id={task_id}) not found")
 
-        await self._add_history(task, TaskStatus.DONE, changed_by=payload.reviewer_id, reason=payload.review_notes)
+        await self._add_history(
+            task,
+            TaskStatus.DONE,
+            changed_by=payload.employee_id,
+            reason=payload.review_notes,
+        )
 
         task.status = TaskStatus.DONE
-        task.reviewer_id = payload.reviewer_id
+        task.reviewer_id = payload.employee_id
         task.review_notes = payload.review_notes
         await self.task_repo.update(task)
 
         # 승인 시 신규 메뉴얼도 승인 처리하여 버전 세트에 반영
         await self.manual_service.approve_manual(
             manual_id=task.new_entry_id,
-            request=ManualApproveRequest(approver_id=payload.reviewer_id, notes=payload.review_notes),
+            request=ManualApproveRequest(approver_id=payload.employee_id, notes=payload.review_notes),
         )
 
         return await self._to_response(task)
@@ -112,9 +118,9 @@ class TaskService:
         task: ManualReviewTask,
         to_status: TaskStatus,
         *,
-        changed_by: UUID | None = None,
+        changed_by: str | None = None,
         reason: str | None = None,
-        ) -> TaskHistory:
+    ) -> TaskHistory:
         history = TaskHistory(
             task_id=task.id,
             from_status=task.status,
@@ -152,9 +158,25 @@ class TaskService:
             new_manual_summary=self._summarize_manual(new_manual),
             diff_text=None,
             diff_json=None,
+            business_type=self._resolve_business_type(new_manual),
+            new_manual_topic=new_manual.topic if new_manual else None,
+            new_manual_keywords=new_manual.keywords if new_manual else None,
         )
 
     def _summarize_manual(self, manual: ManualEntry | None) -> str | None:
         if manual is None:
             return None
         return f"{manual.topic} | {manual.background[:80]}" if manual.background else manual.topic
+
+    def _resolve_business_type(self, manual: ManualEntry | None) -> BusinessType | None:
+        if manual is None or manual.business_type is None:
+            return None
+        try:
+            return BusinessType(manual.business_type)
+        except ValueError:
+            logger.warning(
+                "unknown_business_type",
+                manual_id=str(manual.id),
+                business_type=manual.business_type,
+            )
+            return None

@@ -174,9 +174,9 @@ def create_mcp_server() -> Server:
                             "type": "string",
                             "description": "UUID of the review task to approve",
                         },
-                        "reviewer_id": {
+                        "employee_id": {
                             "type": "string",
-                            "description": "UUID of the reviewer",
+                            "description": "Employee ID of the reviewer",
                         },
                         "create_new_version": {
                             "type": "boolean",
@@ -184,7 +184,7 @@ def create_mcp_server() -> Server:
                             "default": True,
                         },
                     },
-                    "required": ["task_id", "reviewer_id"],
+                    "required": ["task_id", "employee_id"],
                 },
             ),
             Tool(
@@ -197,16 +197,16 @@ def create_mcp_server() -> Server:
                             "type": "string",
                             "description": "UUID of the review task to reject",
                         },
-                        "reviewer_id": {
+                        "employee_id": {
                             "type": "string",
-                            "description": "UUID of the reviewer",
+                            "description": "Employee ID of the reviewer",
                         },
                         "reason": {
                             "type": "string",
                             "description": "Reason for rejection",
                         },
                     },
-                    "required": ["task_id", "reviewer_id", "reason"],
+                    "required": ["task_id", "employee_id", "reason"],
                 },
             ),
         ]

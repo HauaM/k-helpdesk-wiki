@@ -442,7 +442,7 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 │     🌐 API Layer (FastAPI)          │  HTTP 요청 처리
 │  /api/v1/consultations              │
 │  /api/v1/manuals                    │
-│  /api/v1/tasks                      │
+│  /api/v1/manual-review/tasks                      │
 └──────────────┬──────────────────────┘
                │
 ┌──────────────▼──────────────────────┐
@@ -698,7 +698,7 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 <p>생성된 매뉴얼 초안을 검토하고 승인하는 과정입니다.</p>
 <pre><code class="language-mermaid"><div class="mermaid">sequenceDiagram
     actor Reviewer as 관리자<br/>(검토자)
-    participant API as API<br/>/tasks/{id}/approve
+    participant API as API<br/>/manual-review/tasks/{id}/approve
     participant Service as TaskService
     participant ManualService as ManualService<br/>(승인 로직)
     participant ManualRepo as ManualRepository
@@ -706,7 +706,7 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
     participant Vector as VectorStore
     participant Consultation as ConsultationRepository
 
-    Reviewer->>API: POST /tasks/{id}/approve<br/>{reviewer_id, notes}
+    Reviewer->>API: POST /manual-review/tasks/{id}/approve<br/>{employee_id, notes}
     API->>Service: approve_task(task_id, payload)
 
     Service->>Service: _add_history()<br/>상태 변경 기록 (TODO → DONE)
@@ -998,13 +998,13 @@ uv run pytest tests/ -v
 </div></code></pre>
 <h4 id="%EB%A7%A4%EB%89%B4%EC%96%BC-%EC%8A%B9%EC%9D%B8">매뉴얼 승인</h4>
 <pre class="hljs"><code><div><span class="hljs-comment"># 먼저 리뷰 태스크 목록 조회</span>
-curl -X GET http://localhost:8000/api/v1/tasks
+curl -X GET http://localhost:8000/api/v1/manual-review/tasks
 
 <span class="hljs-comment"># 그 다음 승인</span>
-curl -X POST http://localhost:8000/api/v1/tasks/{task_id}/approve \
+curl -X POST http://localhost:8000/api/v1/manual-review/tasks/{task_id}/approve \
   -H <span class="hljs-string">"Content-Type: application/json"</span> \
   -d <span class="hljs-string">'{
-    "reviewer_id": "REV001",
+    "employee_id": "EMP001",
     "review_notes": "승인합니다"
   }'</span>
 </div></code></pre>

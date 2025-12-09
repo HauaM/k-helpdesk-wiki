@@ -15,7 +15,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.db import init_db, close_db
 
 # Import routers
-from app.routers import auth, consultations, manuals, tasks
+from app.routers import auth, consultations, manuals, tasks, common_codes
 
 logger = get_logger(__name__)
 
@@ -92,6 +92,10 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         auth.router,
+        prefix=settings.api_v1_prefix,
+    )
+    app.include_router(
+        common_codes.router,
         prefix=settings.api_v1_prefix,
     )
 

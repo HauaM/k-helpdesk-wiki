@@ -142,9 +142,9 @@ POST   /api/v1/manuals/{id}/review        # Create review task
 
 ### Manual Review Tasks
 ```
-GET    /api/v1/tasks/manual-review        # List review tasks
-POST   /api/v1/tasks/manual-review/{id}/approve  # Approve task
-POST   /api/v1/tasks/manual-review/{id}/reject   # Reject task
+GET    /api/v1/manual-review/tasks                 # List review tasks
+POST   /api/v1/manual-review/tasks/{id}/approve    # Approve task
+POST   /api/v1/manual-review/tasks/{id}/reject     # Reject task
 ```
 
 ## 🗄️ Database Setup

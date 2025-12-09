@@ -180,7 +180,7 @@ class ManualService:
     async def approve_review_task(
         self,
         task_id: UUID,
-        reviewer_id: UUID,
+        reviewer_id: str,
         create_new_version: bool = True,
     ) -> ManualEntry:
         """
@@ -194,7 +194,7 @@ class ManualService:
 
         Args:
             task_id: Review task UUID
-            reviewer_id: Reviewer UUID
+            reviewer_id: Reviewer employee_id
             create_new_version: Whether to create new version
 
         Returns:
@@ -207,7 +207,7 @@ class ManualService:
         logger.info(
             "approve_review_task",
             task_id=str(task_id),
-            reviewer_id=str(reviewer_id),
+            reviewer_id=reviewer_id,
         )
 
         # TODO: Implement workflow
@@ -225,7 +225,7 @@ class ManualService:
     async def reject_review_task(
         self,
         task_id: UUID,
-        reviewer_id: UUID,
+        reviewer_id: str,
         reason: str,
     ) -> None:
         """
@@ -236,13 +236,13 @@ class ManualService:
 
         Args:
             task_id: Review task UUID
-            reviewer_id: Reviewer UUID
+            reviewer_id: Reviewer employee_id
             reason: Rejection reason
         """
         logger.info(
             "reject_review_task",
             task_id=str(task_id),
-            reviewer_id=str(reviewer_id),
+            reviewer_id=reviewer_id,
         )
 
         # TODO: Implement
