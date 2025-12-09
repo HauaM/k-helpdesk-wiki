@@ -79,10 +79,16 @@ class CommonCodeService:
             ValidationError: 입력 데이터 검증 실패
         """
         # 그룹 코드 중복 확인
+        logger.info("create_group_start", group_code=payload.group_code)
         existing = await self.group_repo.get_by_group_code(payload.group_code)
         if existing:
+            logger.warning(
+                "create_group_duplicate_detected",
+                group_code=payload.group_code,
+                existing_id=str(existing.id),
+            )
             raise DuplicateRecordError(
-                f"CommonCodeGroup with code '{payload.group_code}' already exists"
+                f"공통코드 그룹 코드 '{payload.group_code}'이(가) 이미 존재합니다"
             )
 
         # 그룹 생성
@@ -285,16 +291,30 @@ class CommonCodeService:
             RecordNotFoundError: 그룹을 찾을 수 없음
             DuplicateRecordError: 새 그룹 코드가 이미 존재
         """
+        logger.info("update_group_start", group_id=str(group_id), new_group_code=payload.group_code)
         group = await self.group_repo.get_by_id(group_id)
         if not group:
-            raise RecordNotFoundError(f"CommonCodeGroup with id {group_id} not found")
+            logger.warning("update_group_not_found", group_id=str(group_id))
+            raise RecordNotFoundError(f"공통코드 그룹을 찾을 수 없습니다 (ID: {group_id})")
 
         # 그룹 코드 변경 시 중복 확인
         if payload.group_code and payload.group_code != group.group_code:
+            logger.debug(
+                "update_group_code_changed",
+                group_id=str(group_id),
+                old_group_code=group.group_code,
+                new_group_code=payload.group_code,
+            )
             existing = await self.group_repo.get_by_group_code(payload.group_code)
             if existing:
+                logger.warning(
+                    "update_group_duplicate_detected",
+                    group_id=str(group_id),
+                    new_group_code=payload.group_code,
+                    existing_id=str(existing.id),
+                )
                 raise DuplicateRecordError(
-                    f"CommonCodeGroup with code '{payload.group_code}' already exists"
+                    f"공통코드 그룹 코드 '{payload.group_code}'이(가) 이미 존재합니다"
                 )
             group.group_code = payload.group_code
 
@@ -374,15 +394,33 @@ class CommonCodeService:
             DuplicateRecordError: 같은 코드 키가 이미 존재
         """
         # 그룹 존재 확인
+        logger.info(
+            "create_item_start",
+            group_id=str(group_id),
+            code_key=payload.code_key,
+        )
         group = await self.group_repo.get_by_id(group_id)
         if not group:
-            raise RecordNotFoundError(f"CommonCodeGroup with id {group_id} not found")
+            logger.warning("create_item_group_not_found", group_id=str(group_id))
+            raise RecordNotFoundError(f"공통코드 그룹을 찾을 수 없습니다 (ID: {group_id})")
 
         # 코드 키 중복 확인
+        logger.debug(
+            "create_item_checking_duplicate",
+            group_code=group.group_code,
+            code_key=payload.code_key,
+        )
         existing = await self.item_repo.get_by_code_key(group_id, payload.code_key)
         if existing:
+            logger.warning(
+                "create_item_duplicate_detected",
+                group_code=group.group_code,
+                group_id=str(group_id),
+                code_key=payload.code_key,
+                existing_id=str(existing.id),
+            )
             raise DuplicateRecordError(
-                f"CommonCodeItem with key '{payload.code_key}' already exists in this group"
+                f"공통코드 '{payload.code_key}'이(가) '{group.group_code}' 그룹에 이미 존재합니다"
             )
 
         # 항목 생성 (group_id는 VARCHAR(36) 문자열로 저장)
@@ -493,16 +531,29 @@ class CommonCodeService:
             RecordNotFoundError: 항목을 찾을 수 없음
             DuplicateRecordError: 새 코드 키가 이미 존재
         """
+        logger.info("update_item_start", item_id=str(item_id), new_code_key=payload.code_key)
         item = await self.item_repo.get_by_id_or_raise(item_id)
 
         # 코드 키 변경 시 중복 확인
         if payload.code_key and payload.code_key != item.code_key:
+            logger.debug(
+                "update_item_code_key_changed",
+                item_id=str(item_id),
+                old_code_key=item.code_key,
+                new_code_key=payload.code_key,
+            )
             is_duplicate = await self.item_repo.check_duplicate_code_key(
                 item.group_id, payload.code_key, exclude_id=item_id
             )
             if is_duplicate:
+                logger.warning(
+                    "update_item_duplicate_detected",
+                    item_id=str(item_id),
+                    group_id=str(item.group_id),
+                    new_code_key=payload.code_key,
+                )
                 raise DuplicateRecordError(
-                    f"CommonCodeItem with key '{payload.code_key}' already exists in this group"
+                    f"공통코드 '{payload.code_key}'이(가) 이 그룹에 이미 존재합니다"
                 )
             item.code_key = payload.code_key
 
