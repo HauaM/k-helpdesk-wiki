@@ -331,13 +331,27 @@ class CommonCodeService:
         if not group:
             raise RecordNotFoundError(f"CommonCodeGroup with id {group_id} not found")
 
-        await self.group_repo.delete(group)
+        # 먼저 모든 항목 삭제 (ORM cascade delete 문제 회피)
+        deleted_items = await self.item_repo.delete_by_group_id(group_id)
+        logger.info(
+            "common_code_items_deleted",
+            group_id=str(group_id),
+            deleted_count=deleted_items,
+        )
+
+        # Raw SQL로 그룹 삭제 (ORM delete 문제 회피)
+        from sqlalchemy import text
+
+        sql = "DELETE FROM common_code_groups WHERE id = :group_id"
+        params = {"group_id": str(group_id)}
+        result = await self.session.execute(text(sql), params)
         await self.session.commit()
 
         logger.info(
             "common_code_group_deleted",
             group_id=str(group.id),
             group_code=group.group_code,
+            deleted_rows=result.rowcount,
         )
 
     # ==================== Item Management ====================
@@ -371,9 +385,9 @@ class CommonCodeService:
                 f"CommonCodeItem with key '{payload.code_key}' already exists in this group"
             )
 
-        # 항목 생성
+        # 항목 생성 (group_id는 VARCHAR(36) 문자열로 저장)
         item = CommonCodeItem(
-            group_id=group_id,
+            group_id=str(group_id),
             code_key=payload.code_key,
             code_value=payload.code_value,
             sort_order=payload.sort_order,
@@ -523,14 +537,22 @@ class CommonCodeService:
         Raises:
             RecordNotFoundError: 항목을 찾을 수 없음
         """
+        # 항목 존재 확인
         item = await self.item_repo.get_by_id_or_raise(item_id)
-        await self.item_repo.delete(item)
+
+        # Raw SQL로 삭제 (ORM delete 문제 회피)
+        from sqlalchemy import text
+
+        sql = "DELETE FROM common_code_items WHERE id = :item_id"
+        params = {"item_id": str(item_id)}
+        result = await self.session.execute(text(sql), params)
         await self.session.commit()
 
         logger.info(
             "common_code_item_deleted",
             item_id=str(item.id),
             code_key=item.code_key,
+            deleted_rows=result.rowcount,
         )
 
     # ==================== Public Search (Frontend API) ====================
@@ -547,9 +569,7 @@ class CommonCodeService:
 
         Returns:
             축약된 그룹 응답 (id, timestamp 미포함)
-
-        Raises:
-            RecordNotFoundError: 그룹을 찾을 수 없음
+            데이터가 없으면 빈 items 배열과 함께 반환
         """
         logger.info(
             "get_codes_by_group_code_start",
@@ -568,24 +588,13 @@ class CommonCodeService:
             items=str(items) if items else "empty",
         )
 
-        if not items:
-            logger.warning(
-                "get_codes_by_group_code_empty",
-                group_code=group_code,
-            )
-            raise RecordNotFoundError(f"No items found for group code '{group_code}'")
-
-        simple_items = [
-            CommonCodeSimpleResponse(
-                code_key=item.code_key,
-                code_value=item.code_value,
-            )
-            for item in items
-        ]
-
+        # 데이터가 없어도 200 OK with empty items 반환
         return CommonCodeGroupSimpleResponse(
             group_code=group_code,
-            items=simple_items,
+            items=[
+                CommonCodeSimpleResponse(code_key=item.code_key, code_value=item.code_value)
+                for item in items
+            ] if items else []
         )
 
     async def get_multiple_code_groups(

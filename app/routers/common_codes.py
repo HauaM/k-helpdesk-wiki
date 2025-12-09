@@ -50,6 +50,7 @@ def get_common_code_service(
 @router.post(
     "/admin/common-codes/groups",
     response_model=CommonCodeGroupResponse,
+    status_code=201,
     summary="공통코드 그룹 생성",
     tags=["Admin - Common Code Groups"],
 )
@@ -185,6 +186,7 @@ async def delete_group(
 @router.post(
     "/admin/common-codes/groups/{group_id}/items",
     response_model=CommonCodeItemResponse,
+    status_code=201,
     summary="공통코드 항목 생성",
     tags=["Admin - Common Code Items"],
 )
@@ -318,12 +320,11 @@ async def get_codes_by_group(
       ]
     }
     ```
+
+    참고: 데이터가 없어도 200 OK와 빈 items 배열을 반환합니다.
     """
-    try:
-        result = await service.get_codes_by_group_code(group_code, is_active_only=True)
-        return result.model_dump()
-    except RecordNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    result = await service.get_codes_by_group_code(group_code, is_active_only=True)
+    return result.model_dump()
 
 
 @router.post(
