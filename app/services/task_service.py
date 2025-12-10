@@ -17,12 +17,12 @@ from app.core.logging import get_logger
 from app.models.manual import ManualEntry, ManualStatus
 from app.models.task import ManualReviewTask, TaskHistory, TaskStatus
 from app.repositories.manual_rdb import ManualEntryRDBRepository, ManualReviewTaskRepository
+from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.schemas.manual import (
     ManualApproveRequest,
     ManualReviewApproval,
     ManualReviewRejection,
     ManualReviewTaskResponse,
-    BusinessType,
 )
 from app.services.manual_service import ManualService
 from app.core.logging import metrics_counter
@@ -40,11 +40,13 @@ class TaskService:
         manual_service: ManualService,
         task_repo: ManualReviewTaskRepository | None = None,
         manual_repo: ManualEntryRDBRepository | None = None,
+        common_code_item_repo: CommonCodeItemRepository | None = None,
     ) -> None:
         self.session = session
         self.manual_service = manual_service
         self.task_repo = task_repo or ManualReviewTaskRepository(session)
         self.manual_repo = manual_repo or ManualEntryRDBRepository(session)
+        self.common_code_item_repo = common_code_item_repo or CommonCodeItemRepository(session)
 
     async def list_review_tasks(
         self,
@@ -144,6 +146,11 @@ class TaskService:
         old_manual = await self.manual_repo.get_by_id(task.old_entry_id) if task.old_entry_id else None
         new_manual = await self.manual_repo.get_by_id(task.new_entry_id)
 
+        # 신규 메뉴얼 business_type 정보 조회
+        new_business_type_name = await self._get_business_type_name(new_manual)
+        # 기존 메뉴얼 business_type 정보 조회
+        old_business_type_name = await self._get_business_type_name(old_manual)
+
         return ManualReviewTaskResponse(
             id=task.id,
             created_at=task.created_at,
@@ -158,9 +165,17 @@ class TaskService:
             new_manual_summary=self._summarize_manual(new_manual),
             diff_text=None,
             diff_json=None,
-            business_type=self._resolve_business_type(new_manual),
+            # 신규 메뉴얼 정보
+            business_type=new_manual.business_type if new_manual else None,
+            business_type_name=new_business_type_name,
+            new_error_code=new_manual.error_code if new_manual else None,
             new_manual_topic=new_manual.topic if new_manual else None,
             new_manual_keywords=new_manual.keywords if new_manual else None,
+            # 기존 메뉴얼 정보 (old_entry_id가 있을 때만)
+            old_business_type=old_manual.business_type if old_manual else None,
+            old_business_type_name=old_business_type_name,
+            old_error_code=old_manual.error_code if old_manual else None,
+            old_manual_topic=old_manual.topic if old_manual else None,
         )
 
     def _summarize_manual(self, manual: ManualEntry | None) -> str | None:
@@ -168,15 +183,42 @@ class TaskService:
             return None
         return f"{manual.topic} | {manual.background[:80]}" if manual.background else manual.topic
 
-    def _resolve_business_type(self, manual: ManualEntry | None) -> BusinessType | None:
+    async def _get_business_type_name(self, manual: ManualEntry | None) -> str | None:
+        """
+        공통코드에서 business_type의 이름(code_value)을 조회
+
+        Args:
+            manual: ManualEntry 또는 None
+
+        Returns:
+            업무구분 이름 (예: "인터넷뱅킹") 또는 None
+        """
         if manual is None or manual.business_type is None:
             return None
+
         try:
-            return BusinessType(manual.business_type)
-        except ValueError:
+            # BUSINESS_TYPE 그룹의 항목들 조회
+            items = await self.common_code_item_repo.get_by_group_code(
+                "BUSINESS_TYPE", is_active_only=True
+            )
+
+            # business_type 코드와 일치하는 항목 찾기
+            for item in items:
+                if item.code_key == manual.business_type:
+                    return item.code_value
+
+            # 일치하는 항목이 없으면 None 반환
             logger.warning(
-                "unknown_business_type",
+                "business_type_not_found_in_common_code",
                 manual_id=str(manual.id),
                 business_type=manual.business_type,
+            )
+            return None
+        except Exception as e:
+            logger.warning(
+                "error_getting_business_type_name",
+                manual_id=str(manual.id),
+                business_type=manual.business_type,
+                error=str(e),
             )
             return None

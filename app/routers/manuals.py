@@ -30,6 +30,7 @@ from app.schemas.manual import (
     ManualDetailResponse,
 )
 from app.services.manual_service import ManualService
+from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.llm.factory import get_llm_client_instance
 from app.vectorstore.factory import get_manual_vectorstore
 
@@ -42,10 +43,12 @@ def get_manual_service(
     """
     Dependency: Get ManualService instance
     """
+    common_code_item_repo = CommonCodeItemRepository(session)
     return ManualService(
         session=session,
         llm_client=get_llm_client_instance(),
         vectorstore=get_manual_vectorstore(),
+        common_code_item_repo=common_code_item_repo,
     )
 
 
@@ -147,22 +150,24 @@ async def get_manual_by_version(
 
 
 @router.get(
-    "/{manual_group_id}/diff",
+    "/{manual_id}/diff",
     response_model=ManualVersionDiffResponse,
-    summary="Diff manual versions",
+    summary="Diff manual versions in the same group",
 )
 async def diff_manual_versions(
-    manual_group_id: str,
+    manual_id: UUID,
     base_version: str | None = None,
     compare_version: str | None = None,
     summarize: bool = False,
     service: ManualService = Depends(get_manual_service),
 ) -> ManualVersionDiffResponse:
-    """FR-14: 최신/임의 버전 간 Diff."""
+    """
+    FR-14: 같은 그룹의 메뉴얼 버전 간 Diff
+    """
 
     try:
         return await service.diff_versions(
-            manual_group_id,
+            manual_id,
             base_version=base_version,
             compare_version=compare_version,
             summarize=summarize,

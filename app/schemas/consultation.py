@@ -77,6 +77,7 @@ class ConsultationResponse(ConsultationBase, BaseResponseSchema):
     Includes all base fields plus ID and timestamps
     """
 
+    user_name: str | None = None
     manual_entry_id: UUID | None = None
 
 

@@ -5,11 +5,11 @@ Password hashing utilities
 from passlib.context import CryptContext
 
 
-password_context = CryptContext(schemes=["argon2"], deprecated="auto")
+password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(plain: str) -> str:
-    """Hash plain password using argon2"""
+    """Hash plain password using PBKDF2-SHA256"""
     return password_context.hash(plain)
 
 

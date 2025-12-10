@@ -71,7 +71,12 @@ class ConsultationService:
         except Exception as exc:  # noqa: BLE001 - 실패 시 큐 등록 후 전달하지 않음
             self._enqueue_index_retry(consultation, error=str(exc))
 
-        return ConsultationResponse.model_validate(consultation)
+        # user_name을 포함시키기 위해 별도의 조회 필요
+        consultation_with_user = await self.repository.get_by_id_with_user(consultation.id)
+        if consultation_with_user:
+            return self._build_consultation_response(consultation_with_user)
+
+        return self._build_consultation_response(consultation)
 
     async def _index_consultation_vector(self, consultation: Consultation) -> None:
         """VectorStore 인덱싱 헬퍼.
@@ -220,7 +225,7 @@ class ConsultationService:
 
         return [
             ConsultationSearchResult(
-                consultation=ConsultationResponse.model_validate(item["item"]),
+                consultation=self._build_consultation_response(item["item"]),
                 score=item.get("reranked_score", item.get("score", 0.0)),
                 metadata=ConsultationSearchVectorMetadata(**item.get("metadata", {}))
                 if item.get("metadata")
@@ -238,6 +243,13 @@ class ConsultationService:
             "error_code": filters.error_code,
         }
         return {k: v for k, v in metadata.items() if v is not None}
+
+    def _build_consultation_response(self, consultation: Consultation) -> ConsultationResponse:
+        """Consultation 모델을 ConsultationResponse로 변환하며 user_name을 포함."""
+
+        response_data = ConsultationResponse.model_validate(consultation)
+        response_data.user_name = consultation.user.name if consultation.user else None
+        return response_data
 
     def _build_search_metadata(
         self, metadata: dict[str, Any] | None

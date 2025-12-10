@@ -503,16 +503,15 @@ PUT /api/v1/manuals/{manual_id}
 ### ✔ 공통코드 항목(CommonCodeItem) 관리
 
 * code_key (예: "CAR_LOAN")
-* code_value (예: "자동차 대출")
+* code_value (예: "자동차 대출") 
 * group_id (FK)
+* description
 * sort_order
 * is_active
-* metadata(JSONB) — 선택적 필드
 
 ### ✔ 주요 특징
 
 * 서브그룹 코드는 key:value 구조로 저장
-* 필요 시 metadata JSON으로 확장
 * 코드 순서 변경 지원(sort_order)
 * 코드 활성/비활성 관리
 

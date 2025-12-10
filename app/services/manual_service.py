@@ -41,6 +41,7 @@ from app.repositories.manual_rdb import (
     ManualReviewTaskRepository,
     ManualVersionRepository,
 )
+from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.schemas.manual import (
     ManualDraftCreateFromConsultationRequest,
     ManualDraftResponse,
@@ -110,6 +111,7 @@ class ManualService:
         review_repo: ManualReviewTaskRepository | None = None,
         version_repo: ManualVersionRepository | None = None,
         consultation_repo: ConsultationRepository | None = None,
+        common_code_item_repo: CommonCodeItemRepository | None = None,
     ) -> None:
         self.session = session
         self.llm_client = llm_client
@@ -118,6 +120,7 @@ class ManualService:
         self.review_repo = review_repo or ManualReviewTaskRepository(session)
         self.version_repo = version_repo or ManualVersionRepository(session)
         self.consultation_repo = consultation_repo or ConsultationRepository(session)
+        self.common_code_item_repo = common_code_item_repo or CommonCodeItemRepository(session)
 
     async def create_draft_from_consultation(
         self, request: ManualDraftCreateFromConsultationRequest
@@ -330,11 +333,8 @@ class ManualService:
         manual_id: UUID,
         request: ManualApproveRequest,
     ) -> ManualVersionInfo:
-        """FR-4/FR-5: 메뉴얼 승인 및 전체 버전 세트 갱신.
-
-        금융권 정책집: 전체 버전 일괄 적용 컨셉을 반영해 모든 승인 시 Version을
-        1씩 증가시키며, 동일 키(업무구분/에러코드) 기존 항목은 DEPRECATED 처리한다.
-        APPROVED 항목만 VectorStore에 인덱싱한다.
+        """
+        FR-4/FR-5: 메뉴얼 승인 및 그룹별 버전 관리
         """
 
         manual = await self.manual_repo.get_by_id(manual_id)
@@ -345,12 +345,29 @@ class ManualService:
             "manual_approve_start",
             manual_id=str(manual_id),
             approver_id=str(request.approver_id),
+            business_type=manual.business_type,
+            error_code=manual.error_code,
         )
 
-        latest_version = await self.version_repo.get_latest_version()
+        latest_version = await self.version_repo.get_latest_version(
+            business_type=manual.business_type,
+            error_code=manual.error_code,
+        )
         next_version_num = self._next_version_number(latest_version)
-        next_version = ManualVersion(version=str(next_version_num))
+
+        next_version = ManualVersion(
+            version=str(next_version_num),
+            business_type=manual.business_type,
+            error_code=manual.error_code,
+        )
         await self.version_repo.create(next_version)
+
+        logger.info(
+            "manual_version_created",
+            manual_id=str(manual_id),
+            group=f"{manual.business_type}::{manual.error_code}",
+            version=next_version.version,
+        )
 
         await self._deprecate_previous_entries(manual)
 
@@ -366,67 +383,31 @@ class ManualService:
         )
 
     async def list_versions(self, manual_id: UUID) -> list[ManualVersionResponse]:
-        """FR-14: 특정 메뉴얼 그룹의 버전 목록 조회 (최신순, 현재 버전 표시 포함).
-
-        같은 business_type/error_code를 가진 메뉴얼들의 버전을 모두 반환합니다.
-
-        Args:
-            manual_id: 메뉴얼 ID (그룹을 식별하기 위해 사용)
-
-        Returns:
-            버전 목록 (최신순)
-
-        응답 필드:
-        - value: 버전 번호 (예: "v2.1")
-        - label: 사용자 표시용 레이블 (최신 버전에만 "(현재 버전)" 추가)
-        - date: 버전 생성/승인 날짜 (YYYY-MM-DD 형식)
+        """
+        FR-14: 특정 메뉴얼 그룹의 버전 목록 조회 (최신순, 현재 버전 표시 포함)
         """
 
-        # 1. 기준 메뉴얼 조회
         manual = await self.manual_repo.get_by_id(manual_id)
         if manual is None:
             raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
 
-        # 2. 같은 그룹의 APPROVED/DEPRECATED 메뉴얼만 조회 (business_type + error_code)
-        # DRAFT는 version_id가 NULL이므로 버전 목록에 포함되지 않음
-        group_entries = list(
-            await self.manual_repo.find_by_business_and_error(
+        group_versions = list(
+            await self.version_repo.list_versions(
                 business_type=manual.business_type,
                 error_code=manual.error_code,
-                statuses={ManualStatus.APPROVED, ManualStatus.DEPRECATED},
             )
         )
-
-        if not group_entries:
-            return []
-
-        # 3. 그룹 메뉴얼들의 버전 ID 추출 (중복 제거)
-        version_ids = set()
-        for entry in group_entries:
-            if entry.version_id is not None:
-                version_ids.add(entry.version_id)
-
-        if not version_ids:
-            return []
-
-        # 4. 버전 정보 조회 및 정렬 (최신순)
-        all_versions = await self.version_repo.list_versions()
-        group_versions = [v for v in all_versions if v.id in version_ids]
 
         if not group_versions:
             return []
 
         result: list[ManualVersionResponse] = []
         for idx, v in enumerate(group_versions):
-            # 가장 최신 버전(첫 번째 항목)에만 "(현재 버전)" 표시
             label = f"{v.version} (현재 버전)" if idx == 0 else v.version
-
-            # created_at을 YYYY-MM-DD 형식으로 변환
             date_str = v.created_at.strftime("%Y-%m-%d")
-
             result.append(
                 ManualVersionResponse(
-                    version=v.version,  # alias "version" used here
+                    version=v.version,
                     label=label,
                     date=date_str,
                     id=v.id,
@@ -454,15 +435,23 @@ class ManualService:
 
     async def diff_versions(
         self,
-        manual_group_id: str,
+        manual_id: UUID,
         *,
         base_version: str | None,
         compare_version: str | None,
         summarize: bool = False,
     ) -> ManualVersionDiffResponse:
-        """FR-14 시나리오 A/B: 버전 간 Diff."""
+        """
+        FR-14: 버전 간 Diff (그룹별)
+        """
+
+        manual = await self.manual_repo.get_by_id(manual_id)
+        if manual is None:
+            raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
 
         base, compare = await self._resolve_versions_for_diff(
+            business_type=manual.business_type,
+            error_code=manual.error_code,
             base_version=base_version,
             compare_version=compare_version,
         )
@@ -810,38 +799,71 @@ class ManualService:
     async def _resolve_versions_for_diff(
         self,
         *,
+        business_type: str | None,
+        error_code: str | None,
         base_version: str | None,
         compare_version: str | None,
     ) -> tuple[ManualVersion | None, ManualVersion | None]:
-        """Diff 시나리오별 base/compare 버전 결정."""
+        """
+        Diff 시나리오별 base/compare 버전 결정 (그룹 기반)
+        """
 
         if compare_version and base_version is None:
             raise ValidationError("compare_version을 사용할 때는 base_version을 함께 지정하세요.")
 
         if base_version and compare_version:
-            base = await self.version_repo.get_by_version(base_version)
-            compare = await self.version_repo.get_by_version(compare_version)
+            base = await self.version_repo.get_by_version(
+                base_version,
+                business_type=business_type,
+                error_code=error_code,
+            )
+            compare = await self.version_repo.get_by_version(
+                compare_version,
+                business_type=business_type,
+                error_code=error_code,
+            )
             if base is None:
-                raise RecordNotFoundError(f"Base version {base_version} not found")
+                raise RecordNotFoundError(
+                    f"Base version '{base_version}' not found in group {business_type}::{error_code}"
+                )
             if compare is None:
-                raise RecordNotFoundError(f"Compare version {compare_version} not found")
+                raise RecordNotFoundError(
+                    f"Compare version '{compare_version}' not found in group {business_type}::{error_code}"
+                )
             return base, compare
 
         if base_version and compare_version is None:
-            base = await self.version_repo.get_by_version(base_version)
+            base = await self.version_repo.get_by_version(
+                base_version,
+                business_type=business_type,
+                error_code=error_code,
+            )
             if base is None:
-                raise RecordNotFoundError(f"Base version {base_version} not found")
-            latest = await self.version_repo.get_latest_version()
+                raise RecordNotFoundError(
+                    f"Base version '{base_version}' not found in group {business_type}::{error_code}"
+                )
+            latest = await self.version_repo.get_latest_version(
+                business_type=business_type,
+                error_code=error_code,
+            )
             if latest is None:
                 raise RecordNotFoundError("비교할 최신 버전이 없습니다.")
             if latest.id == base.id:
-                versions = await self.version_repo.list_versions(limit=2)
+                versions = await self.version_repo.list_versions(
+                    business_type=business_type,
+                    error_code=error_code,
+                    limit=2,
+                )
                 if len(versions) < 2:
                     raise ValidationError("동일 버전을 비교할 수 없습니다. 다른 버전을 지정하세요.")
                 return versions[1], versions[0]
             return base, latest
 
-        versions = await self.version_repo.list_versions(limit=2)
+        versions = await self.version_repo.list_versions(
+            business_type=business_type,
+            error_code=error_code,
+            limit=2,
+        )
         if len(versions) < 2:
             raise ValidationError("최신/직전 비교를 위해 최소 2개 버전이 필요합니다.")
         return versions[1], versions[0]
@@ -975,13 +997,23 @@ class ManualService:
             recency_weight_config={"weight": 0.05, "half_life_days": 30},
         )
 
-        return [
-            ManualSearchResult(
-                manual=ManualEntryResponse.model_validate(item["item"]),
-                similarity_score=item.get("reranked_score", item.get("score", 0.0)),
+        results = []
+        for item in reranked:
+            manual = item["item"]
+            manual_response = ManualEntryResponse.model_validate(manual)
+
+            # business_type_name 조회
+            business_type_name = await self._get_business_type_name(manual)
+            manual_response.business_type_name = business_type_name
+
+            results.append(
+                ManualSearchResult(
+                    manual=manual_response,
+                    similarity_score=item.get("reranked_score", item.get("score", 0.0)),
+                )
             )
-            for item in reranked
-        ]
+
+        return results
 
     async def update_manual(
         self,
@@ -1054,3 +1086,43 @@ class ManualService:
         )
         await self.review_repo.create(task)
         return task
+
+    async def _get_business_type_name(self, manual: ManualEntry | None) -> str | None:
+        """
+        공통코드에서 business_type의 이름(code_value)을 조회
+
+        Args:
+            manual: ManualEntry 또는 None
+
+        Returns:
+            업무구분 이름 (예: "인터넷뱅킹") 또는 None
+        """
+        if manual is None or manual.business_type is None:
+            return None
+
+        try:
+            # BUSINESS_TYPE 그룹의 항목들 조회
+            items = await self.common_code_item_repo.get_by_group_code(
+                "BUSINESS_TYPE", is_active_only=True
+            )
+
+            # business_type 코드와 일치하는 항목 찾기
+            for item in items:
+                if item.code_key == manual.business_type:
+                    return item.code_value
+
+            # 일치하는 항목이 없으면 None 반환
+            logger.warning(
+                "business_type_not_found_in_common_code",
+                manual_id=str(manual.id),
+                business_type=manual.business_type,
+            )
+            return None
+        except Exception as e:
+            logger.warning(
+                "error_getting_business_type_name",
+                manual_id=str(manual.id),
+                business_type=manual.business_type,
+                error=str(e),
+            )
+            return None

@@ -30,7 +30,7 @@ class OllamaLLMClient(LLMClientProtocol):
     ) -> None:
         self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
         self.model = model or settings.llm_model
-        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=60.0)
+        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=settings.ollama_timeout)
         logger.info("ollama_llm_initialized", base_url=self.base_url, model=self.model)
 
     async def complete(
@@ -54,6 +54,12 @@ class OllamaLLMClient(LLMClientProtocol):
 
         try:
             resp = await self._client.post("/api/generate", json=payload)
+        except httpx.ReadTimeout as exc:
+            raise LLMError(
+                f"Ollama 응답 타임아웃 ({settings.ollama_timeout}초): "
+                f"모델이 응답하지 않습니다. Ollama 서버 상태를 확인하거나 "
+                f"OLLAMA_TIMEOUT을 더 큰 값으로 설정해주세요."
+            ) from exc
         except Exception as exc:  # noqa: BLE001
             raise LLMError(f"Ollama 요청 실패: {exc}") from exc
 

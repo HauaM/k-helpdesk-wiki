@@ -172,32 +172,62 @@ class ManualVersionRepository(BaseRepository[ManualVersion]):
     def __init__(self, session: AsyncSession):
         super().__init__(ManualVersion, session)
 
-    async def get_latest_version(self) -> ManualVersion | None:
+    async def get_latest_version(
+        self,
+        business_type: str | None = None,
+        error_code: str | None = None,
+    ) -> ManualVersion | None:
         """
-        Get the latest manual version
+        Get the latest manual version (optionally filtered by group).
+
+        Args:
+            business_type: Optional business_type filter
+            error_code: Optional error_code filter
 
         Returns:
             Latest ManualVersion or None
         """
-        stmt = select(ManualVersion).order_by(ManualVersion.created_at.desc()).limit(1)
+        stmt = select(ManualVersion)
+        if business_type is not None:
+            stmt = stmt.where(ManualVersion.business_type == business_type)
+        if error_code is not None:
+            stmt = stmt.where(ManualVersion.error_code == error_code)
+        stmt = stmt.order_by(ManualVersion.created_at.desc(), ManualVersion.id.desc()).limit(1)
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
-    async def get_by_version(self, version: str) -> ManualVersion | None:
+    async def get_by_version(
+        self,
+        version: str,
+        business_type: str | None = None,
+        error_code: str | None = None,
+    ) -> ManualVersion | None:
         """
-        Get ManualVersion by version string
+        Get ManualVersion by version string (with optional group filter).
         """
         stmt = select(ManualVersion).where(ManualVersion.version == version)
+        if business_type is not None:
+            stmt = stmt.where(ManualVersion.business_type == business_type)
+        if error_code is not None:
+            stmt = stmt.where(ManualVersion.error_code == error_code)
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
-    async def list_versions(self, limit: int | None = None) -> Sequence[ManualVersion]:
+    async def list_versions(
+        self,
+        business_type: str | None = None,
+        error_code: str | None = None,
+        limit: int = 100,
+    ) -> Sequence[ManualVersion]:
         """
-        List manual versions ordered by creation time (desc)
+        List manual versions ordered by creation time (desc) with optional group filter.
         """
-        stmt = select(ManualVersion).order_by(ManualVersion.created_at.desc())
-        if limit is not None:
-            stmt = stmt.limit(limit)
+        stmt = select(ManualVersion)
+        if business_type is not None:
+            stmt = stmt.where(ManualVersion.business_type == business_type)
+        if error_code is not None:
+            stmt = stmt.where(ManualVersion.error_code == error_code)
+        stmt = stmt.order_by(ManualVersion.created_at.desc(), ManualVersion.id.desc()).limit(limit)
         result = await self.session.execute(stmt)
         return result.scalars().all()
 

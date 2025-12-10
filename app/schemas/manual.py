@@ -72,6 +72,10 @@ class ManualEntryResponse(ManualEntryBase, BaseResponseSchema):
     source_consultation_id: UUID
     version_id: UUID | None
     status: ManualStatus
+    business_type_name: str | None = Field(
+        default=None,
+        description="업무구분 이름 (공통코드값)",
+    )
 
 
 class ManualSearchParams(BaseSchema):
@@ -129,9 +133,17 @@ class ManualReviewTaskResponse(BaseResponseSchema):
     new_manual_summary: str | None = Field(default=None, description="신규 초안 요약")
     diff_text: str | None = Field(default=None, description="LLM 비교 결과 요약")
     diff_json: dict[str, Any] | None = Field(default=None, description="LLM 비교 결과 JSON")
-    business_type: BusinessType | None = Field(
+    business_type: str | None = Field(
         default=None,
-        description="신규 초안(new_entry)의 업무구분 (인터넷뱅킹, 모바일뱅킹, 대출, 예금, 카드)",
+        description="신규 초안(new_entry)의 업무구분 코드",
+    )
+    business_type_name: str | None = Field(
+        default=None,
+        description="신규 초안(new_entry)의 업무구분 이름 (공통코드값)",
+    )
+    new_error_code: str | None = Field(
+        default=None,
+        description="신규 초안(new_entry)의 에러코드",
     )
     new_manual_topic: str | None = Field(
         default=None,
@@ -140,6 +152,22 @@ class ManualReviewTaskResponse(BaseResponseSchema):
     new_manual_keywords: list[str] | None = Field(
         default=None,
         description="신규 초안(new_entry)의 키워드",
+    )
+    old_business_type: str | None = Field(
+        default=None,
+        description="기존 메뉴얼(old_entry)의 업무구분 코드 - old_entry_id가 있을 때만 표시",
+    )
+    old_business_type_name: str | None = Field(
+        default=None,
+        description="기존 메뉴얼(old_entry)의 업무구분 이름 (공통코드값) - old_entry_id가 있을 때만 표시",
+    )
+    old_error_code: str | None = Field(
+        default=None,
+        description="기존 메뉴얼(old_entry)의 에러코드 - old_entry_id가 있을 때만 표시",
+    )
+    old_manual_topic: str | None = Field(
+        default=None,
+        description="기존 메뉴얼(old_entry)의 주제 - old_entry_id가 있을 때만 표시",
     )
 
     # TODO: Optionally include full manual entries for comparison

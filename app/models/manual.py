@@ -10,7 +10,7 @@ import enum
 from uuid import UUID
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Enum as SQLEnum, ForeignKey, String, Text
+from sqlalchemy import Enum as SQLEnum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -110,7 +110,24 @@ class ManualVersion(BaseModel):
 
     __tablename__ = "manual_versions"
 
-    version: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    business_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        index=True,
+        comment="업무구분 (그룹 식별용)",
+    )
+    error_code: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        index=True,
+        comment="에러코드 (그룹 식별용)",
+    )
+
+    version: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="버전 번호 (그룹 내에서 유일)",
+    )
     description: Mapped[str | None] = mapped_column(Text)
     changelog: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -119,5 +136,21 @@ class ManualVersion(BaseModel):
         back_populates="version",
     )
 
+    __table_args__ = (
+        UniqueConstraint(
+            "business_type",
+            "error_code",
+            "version",
+            name="uq_manual_version_group",
+        ),
+    )
+
     def __repr__(self) -> str:
-        return f"<ManualVersion(id={self.id}, version={self.version})>"
+        group_key = (
+            f"{self.business_type}::{self.error_code}"
+            if self.business_type and self.error_code
+            else "unknown"
+        )
+        return (
+            f"<ManualVersion(id={self.id}, group={group_key}, version={self.version})>"
+        )

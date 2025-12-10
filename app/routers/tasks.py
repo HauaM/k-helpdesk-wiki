@@ -16,6 +16,7 @@ from app.schemas.manual import (
 )
 from app.services.manual_service import ManualService
 from app.services.task_service import TaskService
+from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.vectorstore.factory import get_manual_vectorstore
 from app.llm.factory import get_llm_client_instance
 
@@ -30,7 +31,12 @@ def get_task_service(
         vectorstore=get_manual_vectorstore(),
         llm_client=get_llm_client_instance(),
     )
-    return TaskService(session=session, manual_service=manual_service)
+    common_code_item_repo = CommonCodeItemRepository(session)
+    return TaskService(
+        session=session,
+        manual_service=manual_service,
+        common_code_item_repo=common_code_item_repo,
+    )
 
 
 @router.get(

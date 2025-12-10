@@ -16,6 +16,7 @@ from app.models.base import BaseModel
 
 if TYPE_CHECKING:
     from app.models.manual import ManualEntry
+    from app.models.user import User
     from app.models.vector_index import ConsultationVectorIndex
 
 
@@ -51,6 +52,14 @@ class Consultation(BaseModel):
         nullable=True,
         index=True,
         comment="승인된 메뉴얼 항목 연결 (옵션)",
+    )
+
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys="[Consultation.employee_id]",
+        primaryjoin="Consultation.employee_id == User.employee_id",
+        uselist=False,
+        viewonly=True,
     )
 
     manual_entry: Mapped[Optional["ManualEntry"]] = relationship(

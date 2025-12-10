@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.consultation import Consultation
 from app.schemas.consultation import ConsultationCreate
@@ -58,6 +59,13 @@ class ConsultationRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_id_with_user(self, id: UUID) -> Consultation | None:
+        """PK 기반 단건 조회 (user 정보 포함)."""
+
+        stmt = select(Consultation).where(Consultation.id == id).options(selectinload(Consultation.user))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def search_by_ids(
         self,
         ids: list[UUID],
@@ -84,7 +92,7 @@ class ConsultationRepository:
         if filters.end_date:
             conditions.append(Consultation.created_at <= _to_utc(filters.end_date))
 
-        stmt = select(Consultation).where(*conditions)
+        stmt = select(Consultation).where(*conditions).options(selectinload(Consultation.user))
         result = await self.session.execute(stmt)
         records: Sequence[Consultation] = result.scalars().all()
 

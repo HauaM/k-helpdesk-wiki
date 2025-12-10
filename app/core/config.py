@@ -28,7 +28,14 @@ class Settings(BaseSettings):
 
     # API
     api_v1_prefix: str = "/api/v1"
-    allowed_hosts: list[str] = Field(default_factory=lambda: ["*"])
+    allowed_hosts: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:5173",  # Vite default port
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+        ]
+    )
 
     # Database (PostgreSQL)
     database_url: PostgresDsn = Field(
@@ -55,6 +62,7 @@ class Settings(BaseSettings):
 
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
+    ollama_timeout: float = 300.0  # 요청 타임아웃 (초)
 
     # API Keys (loaded from environment)
     openai_api_key: str | None = None
