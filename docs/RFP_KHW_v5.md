@@ -583,6 +583,175 @@ POST /common-codes/bulk   (예: ["BUSINESS_TYPE", "ERROR_CODE"])
 
 ---
 
+---
+
+# 🆕 FR-16. 메뉴얼 초안 조회 기능 (Manual Draft List View – API 기반 버전)**
+
+*(기존 RFP_v5 + 제공된 API 스펙 반영한 최종본)*
+
+---
+
+## 1) 목적
+
+상담사가 LLM으로 생성한 **메뉴얼 초안(DRAFT)** 을
+이미 구현된 API인 **`GET /api/v1/manuals`** 를 활용해 목록 형태로 조회하고,
+상태별 필터링(status_filter), limit 등의 파라미터를 이용하여 쉽게 탐색할 수 있도록 한다.
+
+초안 목록 조회의 목적:
+
+* DRAFT 상태 메뉴얼을 일괄적으로 확인
+* 초안의 metadata(업무구분, 에러코드 등)를 기반으로 검색·필터링
+* 검토자가 승인 대상 초안을 빠르게 식별
+* “승인된 메뉴얼(Approved)” 과 구분되는 독립된 초안 관리 페이지 구현
+
+---
+
+## 2) 사용 API
+
+### ✔ **기존 API 그대로 사용**
+
+```
+GET /api/v1/manuals
+```
+
+#### Query Parameters
+
+| 파라미터          | 타입     | 설명                                                 |
+| ------------- | ------ | -------------------------------------------------- |
+| status_filter | string | DRAFT / APPROVED / DEPRECATED (초안 조회 시 기본값: DRAFT) |
+| limit         | int    | 조회 개수 조절                                           |
+
+#### 초안 조회에 필요한 값
+
+초안 조회 페이지에서는:
+
+```
+GET /api/v1/manuals?status_filter=DRAFT&limit=100
+```
+
+이 호출만으로 충분히 초안 목록 정보를 구성할 수 있음.
+
+---
+
+## 3) API 응답 구조 기반 필드 정의 (RFP 반영)
+
+제공된 응답 구조:
+
+```json
+[
+  {
+    "created_at": "2025-12-10T08:46:56.741Z",
+    "updated_at": "2025-12-10T08:46:56.741Z",
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "keywords": ["string"],
+    "topic": "string",
+    "background": "stringstri",
+    "guideline": "stringstri",
+    "business_type": "string",
+    "error_code": "string",
+    "source_consultation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "version_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "status": "DRAFT",
+    "business_type_name": "string"
+  }
+]
+```
+
+이 필드를 기준으로, 초안 목록 화면에서 사용되는 핵심 비즈니스 데이터는 다음과 같다:
+
+| 필드                                 | 설명               | 비고                    |
+| ---------------------------------- | ---------------- | --------------------- |
+| id                                 | Draft ID         | 상세조회 시 사용             |
+| created_at                         | 초안 생성 일시         | 최신순 정렬 기본값            |
+| updated_at                         | 최근 수정 일시         |                       |
+| topic                              | 초안 제목(토픽)        | 목록에서 핵심               |
+| keywords                           | 원문에서 추출된 키워드     | 다중 표시 가능              |
+| business_type / business_type_name | 업무 분류            | 공통코드 매핑               |
+| error_code                         | 관련 오류코드          | 공통코드 매핑               |
+| source_consultation_id             | 원본 상담 ID         | 상담 상세 페이지 연결          |
+| version_id                         | 메뉴얼 버전 세트 ID     | APPROVED와 연결될 때 사용    |
+| status                             | DRAFT/APPROVED 등 | 초안 목록에서는 DRAFT 필터로 조회 |
+
+---
+
+## 4) 기능 요구사항 (UI/비즈니스 관점에서 RFP 반영)
+
+### ✔ 4.1 초안 목록 조회(List View)
+
+#### Mandatory Columns
+
+* topic
+* keywords
+* business_type_name
+* error_code
+* created_at
+* status (항상 DRAFT)
+* source_consultation_id
+* actions (상세보기, 삭제 등)
+
+#### Filtering Requirements
+
+* status_filter = DRAFT 를 기본값으로 적용
+* business_type 옵션 필터
+* error_code 옵션 필터
+* topic 부분 검색
+* 기간 검색(created_at range)
+
+---
+
+### ✔ 4.2 상세 조회(Drill-down)
+
+목록에서 특정 초안을 선택하면:
+
+* topic
+* keywords
+* background
+* guideline
+* business_type_name
+* error_code
+* 원본 상담 내용 조회 링크(/consultations/{source_consultation_id})
+* version_id (검토 후 승인되면 연결 예정)
+
+---
+
+### ✔ 4.3 삭제 정책
+
+* 초안(DRAFT)은 삭제 가능
+* 삭제는 soft-delete → 목록에서 제외
+* 차후 검토 중인 초안(IN_PROGRESS)일 경우 삭제 불가 (추가 요구사항 가능)
+
+---
+
+## 5) 정렬/페이징 기준
+
+#### 기본 정렬
+
+```
+created_at DESC
+```
+
+#### 페이징
+
+* limit 기반 페이징
+* 페이지네이션은 프론트에서 limit+cursor 방식 권장
+
+---
+
+## 6) VectorStore 영향
+
+* 초안은 VectorStore 인덱싱 대상이 아니다.
+* API가 background/guideline을 포함하더라도, 인덱싱은 APPROVED 단계에서 수행한다.
+
+---
+
+## 7) ERD 영향 없음
+
+* 기존 ManualEntry 엔티티에 의존
+* 목록조회는 내부적으로 ManualRepository.search() 형태로 처리 가능
+
+---
+
+
 # 4. 개발 산출물 요구사항
 
 1. SQLAlchemy 2.0 모델 전체

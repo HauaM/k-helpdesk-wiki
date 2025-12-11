@@ -115,6 +115,35 @@ class TaskService:
         # 반려 시 신규 초안을 DRAFT로 유지, 추가 작업 없음
         return await self._to_response(task)
 
+    async def start_task(
+        self,
+        task_id: UUID,
+    ) -> ManualReviewTaskResponse:
+        """검토 태스크 시작 (TODO → IN_PROGRESS)
+
+        검토자가 태스크 검토를 시작할 때 상태를 IN_PROGRESS로 변경합니다.
+        이를 통해 미완성 초안 노출을 방지합니다.
+
+        Args:
+            task_id: 검토 태스크 ID
+
+        Returns:
+            업데이트된 ManualReviewTaskResponse
+
+        Raises:
+            RecordNotFoundError: 태스크를 찾을 수 없을 때
+        """
+        task = await self.task_repo.get_by_id(task_id)
+        if task is None:
+            raise RecordNotFoundError(f"ManualReviewTask(id={task_id}) not found")
+
+        await self._add_history(task, TaskStatus.IN_PROGRESS)
+
+        task.status = TaskStatus.IN_PROGRESS
+        await self.task_repo.update(task)
+
+        return await self._to_response(task)
+
     async def _add_history(
         self,
         task: ManualReviewTask,

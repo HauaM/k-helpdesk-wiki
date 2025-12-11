@@ -106,3 +106,29 @@ async def reject_review_task(
     TODO: Implement rejection workflow
     """
     return await service.reject_task(task_id, data)
+
+
+@router.put(
+    "/tasks/{task_id}",
+    response_model=ManualReviewTaskResponse,
+    summary="Start manual review task",
+)
+async def start_review_task(
+    task_id: UUID,
+    service: TaskService = Depends(get_task_service),
+) -> ManualReviewTaskResponse:
+    """FR-6: 검토 태스크 시작 (TODO → IN_PROGRESS)
+
+    검토자가 검토를 시작할 때 태스크 상태를 IN_PROGRESS로 변경합니다.
+    이를 통해 미완성 초안이 노출되는 것을 방지합니다.
+
+    요청:
+    - PUT /api/v1/manual-review/tasks/{task_id}
+
+    응답 (200 OK):
+    - 업데이트된 ManualReviewTask (status=IN_PROGRESS)
+
+    제약사항:
+    - TODO 상태인 태스크만 IN_PROGRESS로 변경 가능
+    """
+    return await service.start_task(task_id)
