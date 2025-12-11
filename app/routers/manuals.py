@@ -243,28 +243,6 @@ async def search_manuals(
     return results
 
 
-@router.post(
-    "/{manual_id}/review",
-    response_model=dict[str, str],
-    summary="Create review task for manual",
-)
-async def create_manual_review(
-    manual_id: UUID,
-    service: ManualService = Depends(get_manual_service),
-) -> dict[str, str]:
-    """
-    Create review task for manual entry
-
-    RFP Reference: POST /manuals/{id}/review
-    - Detects conflicts with existing manuals
-    - Creates ManualReviewTask if needed
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Manual review creation not yet implemented",
-    )
-
-
 @router.put(
     "/{manual_id}",
     response_model=ManualEntryResponse,
