@@ -16,6 +16,7 @@ from app.core.db import init_db, close_db
 
 # Import routers
 from app.routers import auth, consultations, manuals, tasks, common_codes
+from app.api.error_handlers import register_exception_handlers
 
 logger = get_logger(__name__)
 
@@ -98,6 +99,8 @@ def create_app() -> FastAPI:
         common_codes.router,
         prefix=settings.api_v1_prefix,
     )
+
+    register_exception_handlers(app)
 
     # Health check endpoint
     @app.get("/health", tags=["health"])
