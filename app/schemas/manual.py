@@ -155,7 +155,7 @@ class ManualReviewTaskResponse(BaseResponseSchema):
 
     old_entry_id: UUID | None
     new_entry_id: UUID
-    similarity: float
+    similarity: float | None
     status: TaskStatus
     reviewer_id: str | None
     review_notes: str | None
@@ -242,9 +242,8 @@ class ManualDraftCreateFromConsultationRequest(BaseSchema):
     )
     compare_with_manual_id: UUID | None = Field(
         default=None,
-        description="(선택) 특정 메뉴얼과 비교하고 싶을 경우 해당 ID 지정. None이면 최신 APPROVED 버전과 비교.",
+        description="(선택) 특정 메뉴얼과 비교하고 싶을 경우 해당 ID 지정. None이면 최신 APPROVED 버전 비교",
     )
-
 
 class ManualDraftResponse(BaseResponseSchema):
     """FR-2: 생성된 메뉴얼 초안 반환 (기존 응답 - 호환성 유지)."""

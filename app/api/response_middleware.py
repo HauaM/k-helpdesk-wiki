@@ -17,9 +17,18 @@ from app.schemas.response import ResponseEnvelope
 class SuccessEnvelopeMiddleware(BaseHTTPMiddleware):
     """Wrap successful JSON responses in the shared response envelope."""
 
+    SKIP_PATHS = {
+        "/openapi.json",
+        "/docs",
+        "/docs/",
+        "/docs/oauth2-redirect",
+        "/redoc",
+        "/redoc/",
+    }
+
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         response = await call_next(request)
-        if not self._should_wrap(response):
+        if not self._should_wrap(response, request):
             return response
 
         body_bytes = await self._extract_body(response)
@@ -41,7 +50,12 @@ class SuccessEnvelopeMiddleware(BaseHTTPMiddleware):
             meta=build_meta(request),
         )
 
-        headers = dict(response.headers)
+        headers = {
+            name: value
+            for name, value in response.headers.items()
+            if name.lower() != "content-length"
+        }
+
         return JSONResponse(
             status_code=response.status_code,
             content=jsonable_encoder(envelope, by_alias=True),
@@ -63,10 +77,14 @@ class SuccessEnvelopeMiddleware(BaseHTTPMiddleware):
 
         return b"".join(data)
 
-    def _should_wrap(self, response: Response) -> bool:
+    def _should_wrap(self, response: Response, request: Request) -> bool:
         if response.status_code >= 400:
             return False
         if response.status_code in (204, 304):
+            return False
+
+        path = request.url.path
+        if path in self.SKIP_PATHS:
             return False
 
         content_type = response.headers.get("content-type", "")
