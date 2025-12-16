@@ -26,6 +26,21 @@ class TaskStatus(str, enum.Enum):
     REJECTED = "REJECTED"
 
 
+class ComparisonType(str, enum.Enum):
+    """
+    비교 결과 타입 분류 (v2.1)
+
+    신규 draft를 기존 메뉴얼과 비교한 결과에 따른 분류:
+    - SIMILAR: 기존 메뉴얼과 매우 유사 (≥0.95 유사도)
+    - SUPPLEMENT: 기존 메뉴얼 보충/개선 (0.7-0.95 유사도)
+    - NEW: 신규 메뉴얼 (<0.7 유사도)
+    """
+
+    SIMILAR = "similar"
+    SUPPLEMENT = "supplement"
+    NEW = "new"
+
+
 class ManualReviewTask(BaseModel):
     """
     FR-4/FR-5/FR-6/FR-7: 메뉴얼 충돌 검출 및 승인/반려 워크플로우 태스크
@@ -44,10 +59,21 @@ class ManualReviewTask(BaseModel):
         comment="신규 상담 기반 메뉴얼 초안",
     )
 
-    similarity: Mapped[float] = mapped_column(
+    similarity: Mapped[float | None] = mapped_column(
         Float,
-        nullable=False,
+        nullable=True,
         comment="기존/신규 유사도 점수",
+    )
+    comparison_type: Mapped[ComparisonType] = mapped_column(
+        SQLEnum(ComparisonType, name="manual_comparison_type", native_enum=False),
+        nullable=False,
+        default=ComparisonType.NEW,
+        comment="비교 타입: similar/supplement/new (v2.1)",
+    )
+    compare_version: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="비교 로직/threshold 버전 식별 키",
     )
 
     status: Mapped[TaskStatus] = mapped_column(
@@ -81,9 +107,19 @@ class ManualReviewTask(BaseModel):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<ManualReviewTask(id={self.id}, status={self.status}, similarity={self.similarity:.2f})>"
+        similarity_text = (
+            f"{self.similarity:.2f}" if self.similarity is not None else "None"
         )
+        return f"<ManualReviewTask(id={self.id}, status={self.status}, similarity={similarity_text})>"
+
+    @property
+    def similarity_score(self) -> float | None:
+        """comparison result alias for spec-aligned field name."""
+        return self.similarity
+
+    @similarity_score.setter
+    def similarity_score(self, value: float | None) -> None:
+        self.similarity = value
 
 
 class TaskHistory(BaseModel):

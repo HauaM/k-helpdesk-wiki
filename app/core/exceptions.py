@@ -94,6 +94,12 @@ class InvalidStatusTransitionError(BusinessLogicError):
     pass
 
 
+class NeedsReReviewError(BusinessLogicError):
+    """Approval guard detected candidate change; review must be recreated."""
+
+    pass
+
+
 # Queue Exceptions
 class QueueError(KHWException):
     """Queue operation failed"""

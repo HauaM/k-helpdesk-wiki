@@ -47,6 +47,7 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 - 🦙 **Ollama LLM 지원**: 로컬 LLM 모델 지원 (OpenAI/Anthropic 대안)
 - 📊 **Manual Diff API**: 매뉴얼 버전 간 비교 및 변경사항 분석
 - 🔗 **향상된 리뷰 태스크**: 기존 매뉴얼 정보와 함께 비교 데이터 제공
+- ⭐ **v2.1 스마트 비교**: ComparisonService 기반 3-path 로직 (SIMILAR/SUPPLEMENT/NEW)
 
 ---
 
@@ -59,7 +60,7 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 
 ### 2. **매뉴얼 (Manual Entry)**
 - 상담을 기반으로 생성된 **구조화된 지식**
-- 상태: **DRAFT** (초안) → **APPROVED** (승인) → **DEPRECATED** (폐지)
+- 상태: **DRAFT** (초안) → **APPROVED** (승인) → **DEPRECATED** (폐지) → **ARCHIVED** (v2.1: 중복 초안)
 - 구성요소:
   - **키워드**: 1-3개의 핵심 검색어
   - **주제 (Topic)**: 한 문장 제목
@@ -72,9 +73,10 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 - 변경사항 추적을 위한 changelog 관리
 
 ### 4. **리뷰 태스크 (Review Task)**
-- 신규 매뉴얼과 기존 매뉴얼의 **충돌 감지**
+- 신규 매뉴얼과 기존 매뉴얼의 **비교 및 검토**
 - 상담자가 승인/반려하는 **워크플로우** 관리
 - 상태: TODO → IN_PROGRESS → DONE/REJECTED
+- **comparison_type** (v2.1): SIMILAR/SUPPLEMENT/NEW 비교 결과 기록
 - 모든 상태 변경은 TaskHistory에 감사 추적 기록
 
 ### 5. **공통코드 (Common Code)** - NEW (FR-15)
@@ -89,9 +91,24 @@ Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 - 저장소: RDB (원본 데이터) + VectorStore (검색 인덱스)
 - 검색 시 메타데이터 필터 적용 (지점, 업무구분 등)
 
-### 7. **환각 방지 (Hallucination Prevention)**
+### 7. **스마트 비교 (Comparison Service)** - v2.1 ⭐
+- **ComparisonService**: 신규 초안과 기존 메뉴얼을 자동으로 비교
+- **3-Path 로직**:
+  - **SIMILAR** (≥0.95): 기존 메뉴얼과 매우 유사 → 중복 방지, 초안 ARCHIVED
+  - **SUPPLEMENT** (0.7~0.95): 기존 메뉴얼 보충 → 리뷰 필요
+  - **NEW** (<0.7): 완전히 새로운 메뉴얼 → 리뷰 필요
+- **유연한 비교 대상**: 사용자가 특정 버전 선택 가능, 또는 최신 APPROVED 자동 선택
+- **안전한 오류 처리**: VectorStore 실패 시 NEW로 처리 (정보 손실 방지)
+
+### 8. **환각 방지 (Hallucination Prevention)**
 - LLM이 **원문에 없는 정보를 만들지 않도록** 검증
 - 예: 매뉴얼의 모든 키워드와 문구가 원본 상담 텍스트에 존재하는지 확인
+
+### 9. **최근 집중 작업 (2025-12-16 기준)**
+- **초안/승인 분리 + 비교 컨텍스트 체계화**: `/manuals/draft`는 comparison_view(좌측 기존, 우측 신규)와 `compare_version`을 포함하여 `manual_review_tasks`에 비교 결과를 저장하며, 필요한 경우 동일 키워드/유사도 보너스 정보를 토대로 키워드 압축을 적용합니다 (`app/schemas/manual.py`, `app/services/comparison_service.py`, `docs/20251216_Multiple_Manuals_UnitSpec_Final.md`).
+- **승인 가드**: `/manuals/{id}/approve`는 review task의 `compared_with_manual_id`/`comparison_type`을 재사용하고, 가드용 `find_best_match_candidate`로 후보 변경을 감지해 `NeedsReReviewError`(409)를 반환합니다. 후보가 안정적이면 best_match만 DEPRECATED+link 설정 (`app/services/manual_service.py`, `app/routers/manuals.py`, `app/core/exceptions.py`).
+- **DB/마이그레이션 + 테스트 보완**: reviewer metadata 관련 컬럼/테이블과 replaced link 필드를 추가하는 마이그레이션 싱크가 적용되었고 (`alembic/versions/20251216_0004_manual_review_and_replacement.py`), comparison/approve guard 단위 테스트를 작성했습니다 (`tests/unit/test_comparison_service.py`, `tests/unit/test_manual_service_approve_guard.py`).
+- **문서/설정 동기화**: Unit Spec과 onboarding 문서가 위 흐름을 반영하도록 정리했고, 키워드 압축 관련 설정을 `app/core/config.py`에 명시했습니다.
 
 ---
 
@@ -188,24 +205,26 @@ class ConsultationService:
     │ business_type      │              │ (PENDING/INDEXED/...) │
     │ error_code         │              └──────────────────────┘
     │ version_id (FK)    │ → ManualVersion (N:1, optional)
-    │ status             │   (DRAFT/APPROVED/DEPRECATED)
+    │ status             │   (DRAFT/APPROVED/DEPRECATED/ARCHIVED ✨)
     │ source_consult...  │
     │ created_at, ...    │
     └────────┬───────────┘
              │ N:1 (으로의 old/new_entry_id)
              │
-    ┌────────▼──────────────────┐
-    │ ManualReviewTask          │
-    │ (리뷰 태스크)              │
-    ├───────────────────────────┤
-    │ id (PK, UUID)             │
-    │ old_entry_id (FK) [NULL]  │
-    │ new_entry_id (FK)         │
-    │ similarity (Float)        │
-    │ status (TODO/DONE/...)    │
-    │ reviewer_id (String)      │
-    │ review_notes, ...         │
-    └────────┬──────────────────┘
+    ┌────────▼──────────────────────────────────┐
+    │ ManualReviewTask                          │
+    │ (리뷰 태스크)                              │
+    ├───────────────────────────────────────────┤
+    │ id (PK, UUID)                             │
+    │ old_entry_id (FK) [NULL]                  │
+    │ new_entry_id (FK)                         │
+    │ similarity (Float)                        │
+    │ comparison_type (String)  ✨ v2.1 추가    │
+    │   - similar/supplement/new                │
+    │ status (TODO/IN_PROGRESS/DONE/REJECTED)   │
+    │ reviewer_id (String)                      │
+    │ review_notes, decision_reason, ...        │
+    └────────┬──────────────────────────────────┘
              │ 1:N (task_id)
              │
     ┌────────▼──────────────────┐
@@ -334,9 +353,10 @@ k-helpdesk-wiki/
 │   │   └── common_codes.py         # NEW: /admin/common-codes, /common-codes
 │   ├── services/                   # 💼 비즈니스 로직 (핵심!)
 │   │   ├── consultation_service.py # 상담 등록, 검색 로직
-│   │   ├── manual_service.py       # 매뉴얼 생성, 검토, 승인, 비교 로직
+│   │   ├── manual_service.py       # 매뉴얼 생성, 검토, 승인, 비교 로직 (1,621 lines)
+│   │   ├── comparison_service.py   # ✨ v2.1: 메뉴얼 비교 로직 (210 lines)
 │   │   ├── task_service.py         # 검토 태스크 승인/반려
-│   │   ├── common_code_service.py  # NEW: 공통코드 CRUD (682 lines)
+│   │   ├── common_code_service.py  # 공통코드 CRUD (682 lines)
 │   │   ├── user_service.py         # 사용자 관리
 │   │   ├── validation.py           # 환각 방지 검증
 │   │   ├── rerank.py               # 검색 결과 재순위화
@@ -403,7 +423,10 @@ k-helpdesk-wiki/
 │   └── versions/
 │       ├── 20251206_0001_reviewer_to_employee_id_string.py
 │       ├── 20251208_2257_fr_15_add_common_code_management.py
-│       └── 20251209_1512_fix_common_code_group_id_column_type.py
+│       ├── 20251209_1512_fix_common_code_group_id_column_type.py
+│       ├── 20251211_0001_group_fields.py             # v2.1: 그룹 필드 추가
+│       ├── 20251211_0002_comparison.py               # v2.1: comparison_type 필드
+│       └── 20251211_0003_manual_status_archived.py   # v2.1: ARCHIVED 상태
 ├── tests/                          # 🧪 테스트
 │   ├── unit/
 │   │   ├── test_consultation_service.py
@@ -414,9 +437,11 @@ k-helpdesk-wiki/
 └── docs/                           # 📚 문서
     ├── KHW_RFP.md                  # 전체 요구사항 정의서
     ├── MCP_SETUP.md                # MCP 서버 설정 가이드
-    ├── FR15_COMMON_CODE_IMPLEMENTATION.md   # NEW (725 lines)
-    ├── FR15_IMPLEMENTATION_SUMMARY.md       # NEW (486 lines)
-    ├── BACKEND_API_GUIDE.md        # NEW (262 lines)
+    ├── FR15_COMMON_CODE_IMPLEMENTATION.md   # 공통코드 구현 (725 lines)
+    ├── FR15_IMPLEMENTATION_SUMMARY.md       # 공통코드 요약 (486 lines)
+    ├── BACKEND_API_GUIDE.md        # API 가이드 (262 lines)
+    ├── 20251211_ManualVersioning_v2.1.md    # v2.1 설계 문서 (28K)
+    ├── 20251216_Issue_Key_Solution_Validation.md  # Issue Key 검증 (26K)
     └── [other documentation]
 ```
 
@@ -463,51 +488,74 @@ ConsultationService.search_consultations()
 응답 (정렬된 결과)
 ```
 
-### 3️⃣ 매뉴얼 초안 생성 (LLM)
+### 3️⃣ 매뉴얼 초안 생성 + 스마트 비교 (v2.1) ✨
 
 ```
 사용자: "상담 #123으로 매뉴얼 만들어"
   ↓
-POST /api/v1/manuals/draft {consultation_id}
+POST /api/v1/manuals/draft {consultation_id, compare_with_manual_id?}
   ↓
 ManualService.create_draft_from_consultation()
   ↓
-1️⃣ 원본 상담 조회
-  ↓
-2️⃣ LLM 호출 (프롬프트에 원문 포함)
+1️⃣ 원본 상담 조회 & LLM으로 초안 생성
    "위 상담 내용에서만 정보를 추출하세요"
   ↓
-3️⃣ 환각 검증 (enforce_hallucination_check=true)
+2️⃣ 환각 검증 (enforce_hallucination_check=true)
    - 키워드가 원문에 있는가?
    - 배경/가이드라인이 원문의 부분집합인가?
-   └─ 위반 시 → DRAFT 생성 + 리뷰 태스크 자동 생성
   ↓
-4️⃣ ManualRepository.create() → 저장
+3️⃣ ComparisonService.compare() 호출 (v2.1 신규)
+   - compare_with_manual_id 있으면: 지정된 버전과 비교
+   - 없으면: 최신 APPROVED 메뉴얼 자동 선택
   ↓
-응답 (201 Created)
+4️⃣ VectorStore.similarity() 계산
+   - 두 메뉴얼 텍스트 간 유사도 (0-1)
+  ↓
+5️⃣ 3-Path 분기 처리:
+   ┌─────────────────────────────────────────────┐
+   │ Path A: SIMILAR (≥0.95)                     │
+   │ → 초안 ARCHIVED 처리                        │
+   │ → 기존 메뉴얼 반환 (중복 방지)              │
+   │ → 리뷰 태스크 생성 안 함                    │
+   └─────────────────────────────────────────────┘
+   ┌─────────────────────────────────────────────┐
+   │ Path B: SUPPLEMENT (0.7~0.95)               │
+   │ → 기존 메뉴얼 보충/개선                     │
+   │ → 초안 DRAFT 저장                           │
+   │ → 리뷰 태스크 생성 (comparison_type=supplement) │
+   └─────────────────────────────────────────────┘
+   ┌─────────────────────────────────────────────┐
+   │ Path C: NEW (<0.7 또는 기존 없음)           │
+   │ → 신규 메뉴얼로 처리                        │
+   │ → 초안 DRAFT 저장                           │
+   │ → 리뷰 태스크 생성 (comparison_type=new)    │
+   └─────────────────────────────────────────────┘
+  ↓
+응답 (comparison_type, draft_entry, existing_manual, review_task_id)
 ```
 
-### 4️⃣ 매뉴얼 충돌 감지 및 리뷰 태스크
+**v2.1 핵심 개선사항:**
+- 중복 메뉴얼 자동 감지 (SIMILAR)
+- 보충 가치 있는 메뉴얼 식별 (SUPPLEMENT)
+- 사용자가 비교 대상 버전 선택 가능
+- VectorStore 실패 시 안전하게 NEW로 처리
+
+### 4️⃣ 매뉴얼 검토 태스크
 
 ```
-신규 매뉴얼 생성
+리뷰 태스크 생성 (Path B/C에서)
   ↓
-ManualService.check_conflict_and_create_task()
+ManualReviewTask 저장
+  - old_entry_id = 기존 메뉴얼 (있으면)
+  - new_entry_id = 신규 초안
+  - similarity = 유사도 점수
+  - comparison_type = similar/supplement/new ✨
+  - status = TODO
   ↓
-1️⃣ VectorStore 검색: 유사도 >= 0.85의 APPROVED 매뉴얼 찾기
-  ├─ 없음 → 충돌 없음 ✅
-  └─ 있음 ↓
-
-2️⃣ LLM으로 비교 분석
-   "기존 매뉴얼과 새 매뉴얼의 차이점은?"
-  ↓
-3️⃣ ManualReviewTask 생성
-   - old_entry_id = 기존 매뉴얼
-   - new_entry_id = 신규 매뉴얼
-   - similarity = 유사도 점수
-   - 상태 = TODO
-  ↓
-관리자 리뷰: 신규 승인 vs 기존 유지 선택
+검토자 화면에서 확인
+  - 기존 vs 신규 비교 뷰
+  - 변경사항 하이라이트
+  - 승인/반려 결정
 ```
 
 ### 5️⃣ 매뉴얼 승인 및 버전 관리
@@ -978,6 +1026,46 @@ OLLAMA_TIMEOUT=300  # 초 단위
 - APPROVED 매뉴얼만 검색에 노출
 - 모든 승인은 TaskHistory에 기록
 
+### Q7-1: v2.1 스마트 비교는 어떻게 작동하나? ⭐
+
+**3-Path 로직 상세:**
+
+**Path A - SIMILAR (≥0.95 유사도):**
+```
+신규 초안 생성 → ComparisonService.compare()
+→ 유사도 0.97 (매우 높음)
+→ 초안 상태: ARCHIVED (중복으로 표시)
+→ 응답: 기존 메뉴얼 반환
+→ 리뷰 태스크 생성 안 함 (불필요한 리뷰 방지)
+```
+
+**Path B - SUPPLEMENT (0.7~0.95):**
+```
+신규 초안 생성 → ComparisonService.compare()
+→ 유사도 0.82 (중간)
+→ 초안 상태: DRAFT
+→ ManualReviewTask 생성 (comparison_type=supplement)
+→ 검토자가 병합 여부 결정
+```
+
+**Path C - NEW (<0.7 또는 기존 없음):**
+```
+신규 초안 생성 → ComparisonService.compare()
+→ 유사도 0.55 (낮음) 또는 기존 메뉴얼 없음
+→ 초안 상태: DRAFT
+→ ManualReviewTask 생성 (comparison_type=new)
+→ 검토자가 승인 여부 결정
+```
+
+**비교 대상 선택:**
+- `compare_with_manual_id` 있음 → 지정된 버전과 비교
+- 없음 → 최신 APPROVED 메뉴얼 자동 선택
+
+**안전 장치:**
+- VectorStore 미구성 → NEW로 처리
+- VectorStore 오류 → NEW로 처리
+- "정보 손실보다 중복이 낫다" 철학
+
 ### Q8: 테스트는 어떻게 작성하나?
 
 ```python
@@ -1050,6 +1138,8 @@ uv run python mcp_server.py
 - 📚 [FR15_COMMON_CODE_IMPLEMENTATION.md](docs/FR15_COMMON_CODE_IMPLEMENTATION.md) - 공통코드 상세 가이드
 - 📚 [MCP_SETUP.md](docs/MCP_SETUP.md) - MCP 서버 설정
 - 📚 [BACKEND_API_GUIDE.md](docs/BACKEND_API_GUIDE.md) - API 엔드포인트 상세
+- ⭐ [20251211_ManualVersioning_v2.1.md](docs/20251211_ManualVersioning_v2.1.md) - v2.1 스마트 비교 시스템 설계
+- 📘 [20251216_Issue_Key_Solution_Validation.md](docs/20251216_Issue_Key_Solution_Validation.md) - Issue Key 검증
 
 **첫 번째 기여:**
 1. 간단한 버그 수정으로 시작

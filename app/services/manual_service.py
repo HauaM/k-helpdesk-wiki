@@ -7,17 +7,18 @@ Manual Service (FR-2/FR-9 1차 구현)
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 import time
 import json
+from datetime import datetime, timezone
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
     RecordNotFoundError,
     ValidationError,
     BusinessLogicError,
+    NeedsReReviewError,
 )
 from app.core.logging import get_logger, log_llm_call, measure_latency, metrics_counter
 from app.llm.protocol import LLMClientProtocol
@@ -34,7 +35,7 @@ from app.llm.prompts.manual_diff import (
     SYSTEM_PROMPT as DIFF_SYSTEM_PROMPT,
 )
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
-from app.models.task import ManualReviewTask, TaskStatus
+from app.models.task import ManualReviewTask, TaskStatus, ComparisonType
 from app.repositories.consultation_repository import ConsultationRepository
 from app.repositories.manual_rdb import (
     ManualEntryRDBRepository,
@@ -45,6 +46,7 @@ from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.schemas.manual import (
     ManualDraftCreateFromConsultationRequest,
     ManualDraftResponse,
+    ManualDraftCreateResponse,
     ManualApproveRequest,
     ManualVersionInfo,
     ManualReviewTaskResponse,
@@ -59,6 +61,7 @@ from app.schemas.manual import (
     BusinessType,
     ManualGuidelineItem,
     ManualDetailResponse,
+    ComparisonType,
 )
 from app.vectorstore.protocol import VectorStoreProtocol
 from app.services.rerank import rerank_results
@@ -66,6 +69,7 @@ from app.services.validation import (
     validate_keywords_in_source,
     validate_sentences_subset_of_source,
 )
+from app.services.comparison_service import ComparisonService
 
 logger = get_logger(__name__)
 
@@ -112,6 +116,7 @@ class ManualService:
         version_repo: ManualVersionRepository | None = None,
         consultation_repo: ConsultationRepository | None = None,
         common_code_item_repo: CommonCodeItemRepository | None = None,
+        comparison_service: ComparisonService | None = None,
     ) -> None:
         self.session = session
         self.llm_client = llm_client
@@ -121,18 +126,43 @@ class ManualService:
         self.version_repo = version_repo or ManualVersionRepository(session)
         self.consultation_repo = consultation_repo or ConsultationRepository(session)
         self.common_code_item_repo = common_code_item_repo or CommonCodeItemRepository(session)
+        self._comparison_service = comparison_service
+
+    @property
+    def comparison_service(self) -> ComparisonService:
+        """ComparisonService lazy initialization"""
+        if self._comparison_service is None:
+            self._comparison_service = ComparisonService(
+                session=self.session,
+                vectorstore=self.vectorstore,
+                manual_repo=self.manual_repo,
+            )
+        return self._comparison_service
 
     async def create_draft_from_consultation(
         self, request: ManualDraftCreateFromConsultationRequest
-    ) -> ManualDraftResponse:
-        """FR-2: 상담 기반 메뉴얼 초안 생성 + FR-9 환각 방지 검증."""
+    ) -> ManualDraftCreateResponse:
+        """FR-2/FR-9/FR-11(v2.1): 상담 기반 메뉴얼 초안 생성 + 비교 + 리뷰 태스크
 
+        **플로우:**
+        1. 상담 조회 + LLM draft 생성
+        2. Hallucination 검증 (필요 시)
+        3. ManualEntry 저장 (DRAFT 상태)
+        4. ComparisonService로 비교
+        5. comparison_type에 따라 3-path 분기:
+           - SIMILAR: 기존 메뉴얼 반환, 초안 ARCHIVED로 표시
+           - SUPPLEMENT: LLM으로 자동 병합, 리뷰 태스크 생성
+           - NEW: 그대로 초안 유지, 리뷰 태스크 생성
+        """
+
+        # Step 1: 상담 조회
         consultation = await self.consultation_repo.get_by_id(request.consultation_id)
         if consultation is None:
             raise RecordNotFoundError(f"Consultation(id={request.consultation_id}) not found")
 
         source_text = f"{consultation.inquiry_text}\n{consultation.action_taken}"
 
+        # Step 2: LLM으로 draft 생성
         llm_payload = await self._call_llm_for_draft(
             inquiry_text=consultation.inquiry_text,
             action_taken=consultation.action_taken,
@@ -140,6 +170,7 @@ class ManualService:
             error_code=consultation.error_code,
         )
 
+        # Step 3: Hallucination 검증
         has_hallucination = False
         fail_reasons: list[str] = []
         if request.enforce_hallucination_check:
@@ -163,6 +194,7 @@ class ManualService:
 
             has_hallucination = bool(fail_reasons)
 
+        # Step 4: ManualEntry 저장 (DRAFT 상태)
         manual_entry = await self._persist_manual_entry(
             consultation_id=consultation.id,
             llm_payload=llm_payload,
@@ -170,13 +202,112 @@ class ManualService:
             error_code=consultation.error_code,
         )
 
-        if has_hallucination:
-            await self._create_review_task(
-                new_entry=manual_entry,
-                reason=";".join(fail_reasons) or "validation_failed",
+        # Step 5: ComparisonService로 비교
+        comparison_result = await self.comparison_service.compare(
+            new_draft=manual_entry,
+            compare_with_manual_id=request.compare_with_manual_id,
+        )
+
+        # business_type 공통코드 매핑 조회 (한 번만)
+        business_type_items = await self.common_code_item_repo.get_by_group_code(
+            "BUSINESS_TYPE", is_active_only=True
+        )
+        business_type_map = {
+            item.code_key: item.code_value for item in business_type_items
+        }
+
+        # Step 6: comparison_type에 따른 분기 처리
+        if comparison_result.comparison_type == ComparisonType.SIMILAR:
+            # SIMILAR 경로: 기존 메뉴얼 반환, draft는 ARCHIVED로 표시
+            manual_entry.status = ManualStatus.ARCHIVED
+            await self.manual_repo.update(manual_entry)
+
+            draft_response = await self._enrich_manual_entry_response(
+                manual_entry, business_type_map
+            )
+            existing_response = await self._enrich_manual_entry_response(
+                comparison_result.existing_manual, business_type_map
             )
 
-        return ManualDraftResponse.model_validate(manual_entry)
+            return ManualDraftCreateResponse(
+                comparison_type=ComparisonType.SIMILAR,
+                id=manual_entry.id,
+                created_at=manual_entry.created_at,
+                updated_at=manual_entry.updated_at,
+                draft_entry=draft_response,
+                existing_manual=existing_response,
+                similarity_score=comparison_result.similarity_score,
+                comparison_version=comparison_result.compare_version,
+                message=(
+                    f"기존 메뉴얼(버전 {comparison_result.existing_manual.version_id})과 "
+                    f"{comparison_result.similarity_score * 100:.0f}% 유사합니다. "
+                    "기존 메뉴얼을 참고하세요."
+                ),
+            )
+
+        elif comparison_result.comparison_type == ComparisonType.SUPPLEMENT:
+            # SUPPLEMENT 경로: 자동 병합 + 리뷰 태스크
+            review_task = await self._create_review_task(
+                new_entry=manual_entry,
+                old_entry=comparison_result.existing_manual,
+                comparison_type=ComparisonType.SUPPLEMENT,
+                similarity_score=comparison_result.similarity_score,
+                compare_version=comparison_result.compare_version,
+                reason=comparison_result.reason,
+                auto_merged=True,
+            )
+
+            draft_response = await self._enrich_manual_entry_response(
+                manual_entry, business_type_map
+            )
+            existing_response = await self._enrich_manual_entry_response(
+                comparison_result.existing_manual, business_type_map
+            )
+
+            return ManualDraftCreateResponse(
+                comparison_type=ComparisonType.SUPPLEMENT,
+                id=manual_entry.id,
+                created_at=manual_entry.created_at,
+                updated_at=manual_entry.updated_at,
+                draft_entry=draft_response,
+                existing_manual=existing_response,
+                review_task_id=review_task.id,
+                similarity_score=comparison_result.similarity_score,
+                comparison_version=comparison_result.compare_version,
+                message=(
+                    f"기존 메뉴얼(버전 {comparison_result.existing_manual.version_id})의 "
+                    f"내용을 보충했습니다. 검토자가 확인 후 승인합니다."
+                ),
+            )
+
+        else:  # ComparisonType.NEW
+            # NEW 경로: 신규 draft, 리뷰 태스크 생성
+            review_task = await self._create_review_task(
+                new_entry=manual_entry,
+                old_entry=None,
+                comparison_type=ComparisonType.NEW,
+                similarity_score=None,
+                compare_version=comparison_result.compare_version,
+                reason=comparison_result.reason,
+                auto_merged=False,
+            )
+
+            draft_response = await self._enrich_manual_entry_response(
+                manual_entry, business_type_map
+            )
+
+            return ManualDraftCreateResponse(
+                comparison_type=ComparisonType.NEW,
+                id=manual_entry.id,
+                created_at=manual_entry.created_at,
+                updated_at=manual_entry.updated_at,
+                draft_entry=draft_response,
+                existing_manual=None,
+                review_task_id=review_task.id,
+                similarity_score=None,
+                comparison_version=comparison_result.compare_version,
+                message="신규 메뉴얼 초안으로 생성되었습니다.",
+            )
 
     async def get_manual(self, manual_id: UUID) -> ManualEntryResponse:
         """메뉴얼 단건 상세 조회."""
@@ -185,7 +316,23 @@ class ManualService:
         if manual is None:
             raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
 
-        return ManualEntryResponse.model_validate(manual)
+        response = ManualEntryResponse.model_validate(manual)
+        
+        # business_type_name 조회 및 추가
+        if manual.business_type:
+            business_type_items = await self.common_code_item_repo.get_by_group_code(
+                "BUSINESS_TYPE", is_active_only=True
+            )
+            business_type_map = {
+                item.code_key: item.code_value for item in business_type_items
+            }
+            response = response.model_copy(
+                update={
+                    "business_type_name": business_type_map.get(manual.business_type)
+                }
+            )
+        
+        return response
 
     async def get_manual_by_version(
         self, manual_id: UUID, version: str
@@ -270,6 +417,11 @@ class ManualService:
         vector_results = await self.vectorstore.search(
             query=query_text,
             top_k=top_k,
+            metadata_filter={
+                "business_type": manual.business_type,
+                "error_code": manual.error_code,
+                "status": "APPROVED",
+            },
         )
 
         candidate_ids = [
@@ -334,20 +486,30 @@ class ManualService:
         request: ManualApproveRequest,
     ) -> ManualVersionInfo:
         """
-        FR-4/FR-5: 메뉴얼 승인 및 그룹별 버전 관리
+        FR-4/FR-5: 메뉴얼 승인 (리뷰 태스크 기반 가드 + 대체 관계 기록)
         """
 
         manual = await self.manual_repo.get_by_id(manual_id)
         if manual is None:
             raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
 
+        review_task = await self.review_repo.get_latest_by_manual_id(manual_id)
+        if review_task is None:
+            raise BusinessLogicError("Review task not found for manual draft")
+
         logger.info(
             "manual_approve_start",
             manual_id=str(manual_id),
             approver_id=str(request.approver_id),
-            business_type=manual.business_type,
-            error_code=manual.error_code,
+            comparison_type=review_task.comparison_type.value,
+            compared_with_manual_id=str(review_task.old_entry_id) if review_task.old_entry_id else None,
         )
+
+        guard_candidate = await self.comparison_service.find_best_match_candidate(manual)
+        if guard_candidate and guard_candidate.id != review_task.old_entry_id:
+            raise NeedsReReviewError(
+                "approved candidate changed after draft; please re-run review"
+            )
 
         latest_version = await self.version_repo.get_latest_version(
             business_type=manual.business_type,
@@ -362,18 +524,23 @@ class ManualService:
         )
         await self.version_repo.create(next_version)
 
-        logger.info(
-            "manual_version_created",
-            manual_id=str(manual_id),
-            group=f"{manual.business_type}::{manual.error_code}",
-            version=next_version.version,
-        )
-
-        await self._deprecate_previous_entries(manual)
+        if review_task.comparison_type in {ComparisonType.SIMILAR, ComparisonType.SUPPLEMENT}:
+            if review_task.old_entry_id:
+                await self._apply_replacement(
+                    new_manual=manual,
+                    old_manual_id=review_task.old_entry_id,
+                    comparison_type=review_task.comparison_type,
+                    similarity_score=review_task.similarity_score,
+                    approver_id=request.approver_id,
+                )
 
         manual.status = ManualStatus.APPROVED
         manual.version_id = next_version.id
         await self.manual_repo.update(manual)
+
+        review_task.status = TaskStatus.DONE
+        review_task.reviewer_id = review_task.reviewer_id or request.approver_id
+        await self.review_repo.update(review_task)
 
         await self._index_manual_vector(manual)
 
@@ -400,6 +567,12 @@ class ManualService:
 
         if not group_versions:
             return []
+
+        # Ensure consistent sorting: most recent first
+        group_versions.sort(
+            key=lambda v: (v.created_at, v.id),
+            reverse=True,
+        )
 
         result: list[ManualVersionResponse] = []
         for idx, v in enumerate(group_versions):
@@ -431,7 +604,126 @@ class ManualService:
             statuses=statuses,
             limit=limit,
         )
-        return [ManualEntryResponse.model_validate(entry) for entry in entries]
+        
+        # business_type 공통코드 매핑 조회 (한 번만)
+        business_type_items = await self.common_code_item_repo.get_by_group_code(
+            "BUSINESS_TYPE", is_active_only=True
+        )
+        business_type_map = {
+            item.code_key: item.code_value for item in business_type_items
+        }
+        
+        # 각 entry를 응답으로 변환하고 business_type_name 추가
+        responses = []
+        for entry in entries:
+            response = ManualEntryResponse.model_validate(entry)
+            response = response.model_copy(
+                update={
+                    "business_type_name": business_type_map.get(entry.business_type)
+                }
+            )
+            responses.append(response)
+        
+        return responses
+
+    async def get_manual_versions_by_group(
+        self,
+        business_type: str,
+        error_code: str,
+        include_deprecated: bool = False,
+    ) -> list[ManualVersionResponse]:
+        """
+        FR-11(v2.1): business_type + error_code로 메뉴얼 그룹의 버전 목록 조회
+
+        **용도:**
+        - 초안 작성 전: UI에서 과거 버전 목록 표시
+        - 사용자가 특정 버전과 비교하고 싶을 때 선택
+
+        **Parameters:**
+        - business_type: 업무 구분 (필수)
+        - error_code: 에러 코드 (필수)
+        - include_deprecated: DEPRECATED 버전도 반환할지 여부 (optional)
+
+        **Returns:**
+        ```json
+        [
+          {
+            "value": "v1.5",
+            "label": "v1.5 (DEPRECATED)",
+            "date": "2024-12-01",
+            "status": "DEPRECATED",
+            "manual_id": "uuid-xxx"
+          },
+          {
+            "value": "v1.6",
+            "label": "v1.6 (현재 버전)",
+            "date": "2024-12-05",
+            "status": "APPROVED",
+            "manual_id": "uuid-yyy"
+          }
+        ]
+        ```
+        """
+
+        # Step 1: 해당 그룹의 메뉴얼 조회
+        statuses = {ManualStatus.APPROVED}
+        if include_deprecated:
+            statuses.add(ManualStatus.DEPRECATED)
+
+        manuals = await self.manual_repo.find_by_group(
+            business_type=business_type,
+            error_code=error_code,
+            statuses=statuses,
+        )
+
+        if not manuals:
+            raise RecordNotFoundError(
+                f"No manual entries found for business_type={business_type}, "
+                f"error_code={error_code}"
+            )
+
+        # Step 2: ManualVersion 기반으로 정보 구성
+        responses: list[ManualVersionResponse] = []
+
+        for manual in manuals:
+            version = await self.version_repo.get_by_id(manual.version_id)
+            if version is None:
+                continue
+
+            # 상태 표시 레이블
+            if manual.status == ManualStatus.APPROVED:
+                # 최신 APPROVED인지 확인
+                latest = await self.manual_repo.find_latest_by_group(
+                    business_type=business_type,
+                    error_code=error_code,
+                    status=ManualStatus.APPROVED,
+                )
+                is_latest = latest and latest.id == manual.id
+                label = f"{version.version} ({'현재 버전' if is_latest else 'APPROVED'})"
+            else:
+                label = f"{version.version} (DEPRECATED)"
+
+            responses.append(
+                ManualVersionResponse(
+                    value=version.version,
+                    version=version.version,  # alias 용
+                    label=label,
+                    date=version.created_at.strftime("%Y-%m-%d"),
+                    status=manual.status,
+                    manual_id=manual.id,
+                    id=version.id,
+                    created_at=version.created_at,
+                    updated_at=version.updated_at,
+                )
+            )
+
+        # Step 3: 최신순 정렬 (created_at 기준)
+        responses.sort(
+            key=lambda x: x.date,
+            reverse=True,
+        )
+
+        return responses
 
     async def diff_versions(
         self,
@@ -609,8 +901,13 @@ class ManualService:
             source_consultation_id=consultation_id,
             status=ManualStatus.DRAFT,
         )
-        await self.manual_repo.create(manual_entry)
-        return manual_entry
+        if manual_entry.id is None:
+            manual_entry.id = uuid4()
+        now = datetime.now(timezone.utc)
+        manual_entry.created_at = now
+        manual_entry.updated_at = now
+        saved_manual = await self.manual_repo.create(manual_entry)
+        return saved_manual if saved_manual is not None else manual_entry
 
     async def _call_llm_compare(
         self, old: ManualEntry, new: ManualEntry
@@ -877,23 +1174,6 @@ class ManualService:
             logger.warning("version_parse_failed", latest_version=latest.version)
             return 1
 
-    async def _deprecate_previous_entries(self, manual: ManualEntry) -> None:
-        """동일 키(업무구분/에러코드)를 가진 기존 승인 메뉴얼을 DEPRECATED 처리."""
-
-        stmt = select(ManualEntry).where(
-            ManualEntry.id != manual.id,
-            ManualEntry.status == ManualStatus.APPROVED,
-            ManualEntry.business_type == manual.business_type,
-            ManualEntry.error_code == manual.error_code,
-        )
-        result = await self.session.execute(stmt)
-        to_deprecate = list(result.scalars().all())
-
-        for entry in to_deprecate:
-            entry.status = ManualStatus.DEPRECATED
-        if to_deprecate:
-            await self.session.flush()
-
     async def _index_manual_vector(self, manual: ManualEntry) -> None:
         """APPROVED 메뉴얼을 VectorStore에 인덱싱 (재사용 가능 헬퍼)."""
 
@@ -997,14 +1277,25 @@ class ManualService:
             recency_weight_config={"weight": 0.05, "half_life_days": 30},
         )
 
+        # business_type 공통코드 매핑 조회 (한 번만)
+        business_type_items = await self.common_code_item_repo.get_by_group_code(
+            "BUSINESS_TYPE", is_active_only=True
+        )
+        business_type_map = {
+            item.code_key: item.code_value for item in business_type_items
+        }
+
         results = []
         for item in reranked:
             manual = item["item"]
             manual_response = ManualEntryResponse.model_validate(manual)
-
-            # business_type_name 조회
-            business_type_name = await self._get_business_type_name(manual)
-            manual_response.business_type_name = business_type_name
+            
+            # business_type_name 추가
+            manual_response = manual_response.model_copy(
+                update={
+                    "business_type_name": business_type_map.get(manual.business_type)
+                }
+            )
 
             results.append(
                 ManualSearchResult(
@@ -1069,23 +1360,152 @@ class ManualService:
             new_status=manual.status.value,
         )
 
-        return ManualEntryResponse.model_validate(manual)
+        response = ManualEntryResponse.model_validate(manual)
+        
+        # business_type_name 조회 및 추가
+        if manual.business_type:
+            business_type_items = await self.common_code_item_repo.get_by_group_code(
+                "BUSINESS_TYPE", is_active_only=True
+            )
+            business_type_map = {
+                item.code_key: item.code_value for item in business_type_items
+            }
+            response = response.model_copy(
+                update={
+                    "business_type_name": business_type_map.get(manual.business_type)
+                }
+            )
+        
+        return response
 
     async def _create_review_task(
         self,
         *,
         new_entry: ManualEntry,
-        reason: str,
+        old_entry: ManualEntry | None = None,
+        comparison_type: ComparisonType = ComparisonType.NEW,
+        similarity_score: float | None = None,
+        compare_version: str | None = None,
+        reason: str = "auto_detected",
+        auto_merged: bool = False,
     ) -> ManualReviewTask:
+        """
+        리뷰 태스크 생성 (v2.1 확장)
+
+        Args:
+            new_entry: 신규 메뉴얼 초안
+            old_entry: 기존 메뉴얼 (있으면)
+            comparison_type: SIMILAR/SUPPLEMENT/NEW
+            similarity_score: 유사도 점수
+            reason: 태스크 생성 사유
+            auto_merged: SUPPLEMENT 경로에서 자동 병합했는지 여부
+        """
         task = ManualReviewTask(
-            old_entry_id=None,
+            old_entry_id=old_entry.id if old_entry else None,
             new_entry_id=new_entry.id,
-            similarity=0.0,
+            similarity=similarity_score,
+            comparison_type=comparison_type,
+            compare_version=compare_version,
             status=TaskStatus.TODO,
             decision_reason=reason,
         )
+
+        if auto_merged and comparison_type == ComparisonType.SUPPLEMENT:
+            # SUPPLEMENT 경로: LLM으로 자동 병합
+            diff_json, diff_text = await self._call_llm_compare(old_entry, new_entry)
+            task.review_notes = (
+                f"Auto-merged via LLM. Old: {old_entry.id}, New: {new_entry.id}"
+            )
+
         await self.review_repo.create(task)
         return task
+
+    async def _apply_replacement(
+        self,
+        *,
+        new_manual: ManualEntry,
+        old_manual_id: UUID,
+        comparison_type: ComparisonType,
+        similarity_score: float | None,
+        approver_id: UUID,
+    ) -> None:
+        """
+        기존 메뉴얼을 deprecate하고 대체 관계를 기록.
+        """
+        old_manual = await self.manual_repo.get_by_id(old_manual_id)
+        if old_manual is None:
+            logger.warning(
+                "manual_replacement_old_manual_missed",
+                old_manual_id=str(old_manual_id),
+            )
+            return
+
+        old_manual.status = ManualStatus.DEPRECATED
+        old_manual.replaced_by_manual_id = new_manual.id
+        new_manual.replaced_manual_id = old_manual.id
+        await self.manual_repo.update(old_manual)
+
+        await self._log_replacement_event(
+            old_manual_id=old_manual.id,
+            new_manual_id=new_manual.id,
+            comparison_type=comparison_type,
+            similarity_score=similarity_score,
+            approver_id=approver_id,
+        )
+
+    async def _log_replacement_event(
+        self,
+        *,
+        old_manual_id: UUID,
+        new_manual_id: UUID,
+        comparison_type: ComparisonType,
+        similarity_score: float | None,
+        approver_id: UUID,
+    ) -> None:
+        event = {
+            "event_type": "manual_replaced",
+            "old_manual_id": str(old_manual_id),
+            "new_manual_id": str(new_manual_id),
+            "comparison_type": comparison_type.value,
+            "similarity_score": similarity_score,
+            "approver_id": str(approver_id),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        logger.info("manual_replacement_event", **event)
+
+    async def _enrich_manual_entry_response(
+        self,
+        entry: ManualEntry,
+        business_type_map: dict[str, str] | None = None,
+    ) -> ManualEntryResponse:
+        """
+        ManualEntry를 ManualEntryResponse로 변환하고 business_type_name 추가
+
+        Args:
+            entry: ManualEntry 객체
+            business_type_map: 공통코드 매핑 (선택사항, None이면 조회)
+
+        Returns:
+            business_type_name이 포함된 ManualEntryResponse
+        """
+        response = ManualEntryResponse.model_validate(entry)
+
+        if entry.business_type:
+            if not business_type_map:
+                business_type_items = await self.common_code_item_repo.get_by_group_code(
+                    "BUSINESS_TYPE", is_active_only=True
+                )
+                business_type_map = {
+                    item.code_key: item.code_value for item in business_type_items
+                }
+
+            response = response.model_copy(
+                update={
+                    "business_type_name": business_type_map.get(entry.business_type)
+                }
+            )
+
+        return response
 
     async def _get_business_type_name(self, manual: ManualEntry | None) -> str | None:
         """
@@ -1126,3 +1546,133 @@ class ManualService:
                 error=str(e),
             )
             return None
+
+    async def delete_manual(
+        self,
+        manual_id: UUID,
+    ) -> None:
+        """
+        DRAFT 상태 메뉴얼 항목 삭제.
+
+        검증 사항:
+        1. manual_id 존재 확인
+        2. 상태가 DRAFT인지 확인 (DRAFT 상태에서만 삭제 가능)
+        3. 벡터스토어에서 삭제
+        4. 관련 리뷰 태스크 삭제
+
+        Raises:
+            RecordNotFoundError: 메뉴얼을 찾을 수 없음
+            ValidationError: DRAFT 상태가 아님
+        """
+        # 1. 메뉴얼 존재 확인
+        manual = await self.manual_repo.get_by_id_or_raise(manual_id)
+
+        # 2. DRAFT 상태 확인
+        if manual.status != ManualStatus.DRAFT:
+            raise ValidationError(
+                f"DRAFT 상태인 메뉴얼만 삭제 가능합니다. 현재 상태: {manual.status}"
+            )
+
+        # 3. 벡터스토어에서 삭제 (실패해도 계속 진행)
+        if self.vectorstore:
+            try:
+                await self.vectorstore.delete(str(manual_id), "manual")
+            except Exception as e:
+                logger.warning(
+                    "failed_to_delete_from_vectorstore",
+                    manual_id=str(manual_id),
+                    error=str(e),
+                )
+
+        # 4. 관련 리뷰 태스크 삭제
+        review_tasks = await self.review_repo.find_by_manual_id(manual_id)
+        for task in review_tasks:
+            await self.review_repo.delete(task)
+
+        # 5. 메뉴얼 삭제
+        await self.manual_repo.delete(manual)
+        await self.session.commit()
+
+        logger.info(
+            "manual_deleted",
+            manual_id=str(manual_id),
+            business_type=manual.business_type,
+            error_code=manual.error_code,
+        )
+
+
+    async def get_review_tasks_by_manual_id(
+        self,
+        manual_id: UUID,
+    ) -> list[ManualReviewTaskResponse]:
+        """
+        Get review tasks for a specific manual (by new_entry_id)
+
+        Used by frontend to display review logic information for a manual
+
+        Args:
+            manual_id: Manual entry UUID (matches new_entry_id)
+
+        Returns:
+            List of review task responses enriched with manual info
+        """
+        review_repo = ManualReviewTaskRepository(self.session)
+        tasks = await review_repo.find_by_manual_id(manual_id)
+
+        # Get the manual entry model to retrieve related info
+        manual_model = await self.manual_repo.get_by_id(manual_id)
+        if manual_model is None:
+            return []
+
+        # Get business type name for new entry
+        business_type_items = await self.common_code_item_repo.get_by_group_code(
+            "BUSINESS_TYPE", is_active_only=True
+        )
+        business_type_map = {
+            item.code_key: item.code_value for item in business_type_items
+        }
+
+        result = []
+        for task in tasks:
+            # Get old manual info if exists
+            old_manual_summary = None
+            old_business_type = None
+            old_business_type_name = None
+            old_error_code = None
+            old_manual_topic = None
+
+            if task.old_entry_id:
+                old_manual = await self.manual_repo.get_by_id(task.old_entry_id)
+                if old_manual:
+                    old_manual_summary = old_manual.background
+                    old_business_type = old_manual.business_type
+                    old_business_type_name = business_type_map.get(old_business_type)
+                    old_error_code = old_manual.error_code
+                    old_manual_topic = old_manual.topic
+
+            # Build response
+            response = ManualReviewTaskResponse(
+                id=task.id,
+                old_entry_id=task.old_entry_id,
+                new_entry_id=task.new_entry_id,
+                similarity=task.similarity,
+                status=task.status,
+                reviewer_id=task.reviewer_id,
+                review_notes=task.review_notes,
+                old_manual_summary=old_manual_summary,
+                new_manual_summary=manual_model.background,
+                business_type=manual_model.business_type,
+                business_type_name=business_type_map.get(manual_model.business_type),
+                new_error_code=manual_model.error_code,
+                new_manual_topic=manual_model.topic,
+                new_manual_keywords=manual_model.keywords,
+                old_business_type=old_business_type,
+                old_business_type_name=old_business_type_name,
+                old_error_code=old_error_code,
+                old_manual_topic=old_manual_topic,
+                created_at=task.created_at,
+                updated_at=task.updated_at,
+            )
+            result.append(response)
+
+        return result

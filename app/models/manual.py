@@ -28,6 +28,7 @@ class ManualStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     APPROVED = "APPROVED"
     DEPRECATED = "DEPRECATED"
+    ARCHIVED = "ARCHIVED"
 
 
 class ManualEntry(BaseModel):
@@ -80,6 +81,41 @@ class ManualEntry(BaseModel):
     )
     version: Mapped[Optional["ManualVersion"]] = relationship(
         "ManualVersion", back_populates="entries"
+    )
+    replaced_manual_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("manual_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="이 메뉴얼이 대체한 기존 메뉴얼 ID",
+    )
+    replaced_by_manual_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("manual_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="이 메뉴얼을 대체한 신규 메뉴얼 ID",
+    )
+
+    replaced_manual: Mapped[Optional["ManualEntry"]] = relationship(
+        "ManualEntry",
+        foreign_keys=[replaced_manual_id],
+        remote_side="ManualEntry.id",
+        back_populates="replaced_by_manuals",
+        uselist=False,
+    )
+    replaced_by_manuals: Mapped[list["ManualEntry"]] = relationship(
+        "ManualEntry",
+        foreign_keys=[replaced_manual_id],
+        back_populates="replaced_manual",
+    )
+    replaced_by: Mapped[Optional["ManualEntry"]] = relationship(
+        "ManualEntry",
+        foreign_keys=[replaced_by_manual_id],
+        remote_side="ManualEntry.id",
+        back_populates="deprecated_manuals",
+        uselist=False,
+    )
+    deprecated_manuals: Mapped[list["ManualEntry"]] = relationship(
+        "ManualEntry",
+        foreign_keys=[replaced_by_manual_id],
+        back_populates="replaced_by",
     )
     review_tasks_as_old: Mapped[list["ManualReviewTask"]] = relationship(
         "ManualReviewTask",

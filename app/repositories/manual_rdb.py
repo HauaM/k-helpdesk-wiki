@@ -4,7 +4,7 @@ Database operations for Manual models
 """
 
 from uuid import UUID
-from typing import Sequence
+from typing import Literal, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -159,6 +159,131 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def find_by_group(
+        self,
+        business_type: str,
+        error_code: str,
+        statuses: set[ManualStatus] | None = None,
+    ) -> Sequence[ManualEntry]:
+        """
+        Find all manual entries for a specific group (FR-11 v2.1).
+
+        Used to list all versions of a manual group for user selection.
+
+        Args:
+            business_type: Business type (e.g., "인터넷뱅킹")
+            error_code: Error code (e.g., "E001")
+            statuses: Optional status filter (None = all statuses)
+
+        Returns:
+            Manual entries in the group, ordered by created_at DESC (newest first)
+        """
+        stmt = select(ManualEntry).where(
+            ManualEntry.business_type == business_type,
+            ManualEntry.error_code == error_code,
+        )
+
+        if statuses:
+            stmt = stmt.where(ManualEntry.status.in_(list(statuses)))
+
+        stmt = stmt.order_by(ManualEntry.created_at.desc())
+
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def find_all_approved_by_group(
+        self,
+        business_type: str | None,
+        error_code: str | None,
+    ) -> list[ManualEntry]:
+        """
+        Get all APPROVED manuals in the same group.
+        """
+        if business_type is None or error_code is None:
+            return []
+
+        stmt = (
+            select(ManualEntry)
+            .where(
+                ManualEntry.business_type == business_type,
+                ManualEntry.error_code == error_code,
+                ManualEntry.status == ManualStatus.APPROVED,
+            )
+            .order_by(ManualEntry.created_at.desc())
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def find_replacement_chain(
+        self,
+        manual_id: UUID,
+        direction: Literal["forward", "backward"] = "forward",
+    ) -> list[ManualEntry]:
+        """
+        Retrieve replacement chain (past or future) for a manual.
+        """
+        chain: list[ManualEntry] = []
+        current = await self.get_by_id(manual_id)
+
+        for _ in range(100):
+            if current is None:
+                break
+
+            next_id = (
+                current.replaced_manual_id
+                if direction == "forward"
+                else current.replaced_by_manual_id
+            )
+            if next_id is None:
+                break
+
+            next_entry = await self.get_by_id(next_id)
+            if next_entry is None:
+                break
+
+            chain.append(next_entry)
+            current = next_entry
+
+        return chain
+
+    async def find_latest_by_group(
+        self,
+        business_type: str,
+        error_code: str,
+        status: ManualStatus | None = None,
+        exclude_id: UUID | None = None,
+    ) -> ManualEntry | None:
+        """
+        Find the latest manual entry for a specific group (FR-11 v2.1).
+
+        Used by ComparisonService to find the latest version to compare against.
+
+        Args:
+            business_type: Business type (e.g., "인터넷뱅킹")
+            error_code: Error code (e.g., "E001")
+            status: Optional status filter (e.g., ManualStatus.APPROVED)
+            exclude_id: Optional ID to exclude (e.g., new draft)
+
+        Returns:
+            Latest manual entry or None if not found
+        """
+        stmt = select(ManualEntry).where(
+            ManualEntry.business_type == business_type,
+            ManualEntry.error_code == error_code,
+        )
+
+        if status is not None:
+            stmt = stmt.where(ManualEntry.status == status)
+
+        if exclude_id is not None:
+            stmt = stmt.where(ManualEntry.id != exclude_id)
+
+        stmt = stmt.order_by(ManualEntry.created_at.desc()).limit(1)
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     # TODO: Add more query methods
     # async def find_approved_by_keywords(...)
     # async def deprecate_entry(...)
@@ -285,6 +410,41 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def find_by_manual_id(
+        self,
+        manual_id: UUID,
+    ) -> Sequence[ManualReviewTask]:
+        """
+        Find review tasks by new_entry_id (manual_id)
+
+        Args:
+            manual_id: Manual entry UUID (matches new_entry_id)
+
+        Returns:
+            List of review tasks for the manual
+        """
+        stmt = select(ManualReviewTask).where(
+            ManualReviewTask.new_entry_id == manual_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def get_latest_by_manual_id(
+        self,
+        manual_id: UUID,
+    ) -> ManualReviewTask | None:
+        """
+        Get latest review task for the manual entry (new_entry_id).
+        """
+        stmt = (
+            select(ManualReviewTask)
+            .where(ManualReviewTask.new_entry_id == manual_id)
+            .order_by(ManualReviewTask.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
 
     # TODO: Add workflow methods
     # async def approve_task(...)

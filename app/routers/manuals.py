@@ -5,7 +5,7 @@ RFP Reference: Section 10 - API Design
 """
 
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -13,12 +13,13 @@ from app.core.exceptions import (
     RecordNotFoundError,
     ValidationError,
     BusinessLogicError,
+    NeedsReReviewError,
 )
 from app.models.manual import ManualStatus
 from app.schemas.manual import (
     ManualApproveRequest,
     ManualDraftCreateFromConsultationRequest,
-    ManualDraftResponse,
+    ManualDraftCreateResponse,
     ManualEntryResponse,
     ManualEntryUpdate,
     ManualSearchParams,
@@ -54,31 +55,67 @@ def get_manual_service(
 
 @router.post(
     "/draft",
-    response_model=ManualDraftResponse,
+    response_model=ManualDraftCreateResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create manual draft from consultation",
+    summary="Create manual draft from consultation (v2.1 with comparison)",
 )
 async def create_manual_draft(
     payload: ManualDraftCreateFromConsultationRequest,
     service: ManualService = Depends(get_manual_service),
-) -> ManualDraftResponse:
-    """FR-2/FR-9: 상담 기반 메뉴얼 초안 생성 (환각 검증 포함)."""
+) -> ManualDraftCreateResponse:
+    """
+    FR-2/FR-9/FR-11(v2.1): 상담 기반 메뉴얼 초안 생성 + 비교 + 리뷰 태스크
+
+    **Request:**
+    ```json
+    {
+      "consultation_id": "uuid-xxx",
+      "enforce_hallucination_check": true,
+      "compare_with_manual_id": "uuid-yyy"  // Optional: 특정 버전과 비교
+    }
+    ```
+
+    **Response (3 가지 경로):**
+
+    1. SIMILAR (기존 메뉴얼과 유사):
+    ```json
+    {
+      "comparison_type": "similar",
+      "draft_entry": {...},
+      "existing_manual": {...},
+      "similarity_score": 0.97,
+      "message": "기존 메뉴얼과 매우 유사합니다..."
+    }
+    ```
+
+    2. SUPPLEMENT (기존 메뉴얼 보충):
+    ```json
+    {
+      "comparison_type": "supplement",
+      "draft_entry": {...},
+      "existing_manual": {...},
+      "review_task_id": "uuid-task",
+      "similarity_score": 0.82,
+      "message": "기존 메뉴얼의 내용을 보충했습니다..."
+    }
+    ```
+
+    3. NEW (신규 메뉴얼):
+    ```json
+    {
+      "comparison_type": "new",
+      "draft_entry": {...},
+      "existing_manual": null,
+      "review_task_id": "uuid-task",
+      "similarity_score": null,
+      "message": "신규 메뉴얼 초안으로 생성되었습니다."
+    }
+    ```
+
+    - `comparison_view` 필드는 좌측(기존) / 우측(신규) 비교 컨텍스트 및 `comparison_version`을 제공합니다 (SIMILAR/SUPPLEMENT).
+    """
 
     return await service.create_draft_from_consultation(payload)
-
-
-@router.post(
-    "/draft/{manual_id}/conflict-check",
-    response_model=ManualReviewTaskResponse | None,
-    summary="Check conflict and create review task",
-)
-async def check_conflict(
-    manual_id: UUID,
-    service: ManualService = Depends(get_manual_service),
-) -> ManualReviewTaskResponse | None:
-    """FR-6: 신규 초안과 기존 메뉴얼 자동 비교."""
-
-    return await service.check_conflict_and_create_task(manual_id)
 
 
 @router.post(
@@ -93,7 +130,82 @@ async def approve_manual(
 ) -> ManualVersionInfo:
     """FR-4/FR-5: 메뉴얼 승인 및 전체 버전 세트 관리."""
 
-    return await service.approve_manual(manual_id, payload)
+    try:
+        return await service.approve_manual(manual_id, payload)
+    except NeedsReReviewError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except BusinessLogicError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/versions",
+    response_model=list[ManualVersionResponse],
+    summary="Get manual versions by business type and error code",
+)
+async def get_versions_by_group(
+    business_type: str = Query(..., description="업무 구분 (예: 인터넷뱅킹)"),
+    error_code: str = Query(..., description="에러 코드 (예: E001)"),
+    include_deprecated: bool = Query(
+        default=False,
+        description="DEPRECATED 버전 포함 여부",
+    ),
+    service: ManualService = Depends(get_manual_service),
+) -> list[ManualVersionResponse]:
+    """
+    FR-11(v2.1): business_type + error_code로 메뉴얼 그룹의 버전 목록 조회
+
+    **용도:**
+    - 초안 작성 전: UI에서 과거 버전 목록 표시
+    - 사용자가 특정 버전과 비교하고 싶을 때 선택
+
+    **Query Parameters:**
+    - business_type: 업무 구분 (필수)
+    - error_code: 에러 코드 (필수)
+    - include_deprecated: DEPRECATED 버전도 반환할지 여부 (optional)
+
+    **Returns:**
+    ```json
+    [
+      {
+        "value": "v1.5",
+        "label": "v1.5 (DEPRECATED)",
+        "date": "2024-12-01",
+        "status": "DEPRECATED",
+        "manual_id": "uuid-xxx"
+      },
+      {
+        "value": "v1.6",
+        "label": "v1.6 (현재 버전)",
+        "date": "2024-12-05",
+        "status": "APPROVED",
+        "manual_id": "uuid-yyy"
+      }
+    ]
+    ```
+    """
+    try:
+        return await service.get_manual_versions_by_group(
+            business_type=business_type,
+            error_code=error_code,
+            include_deprecated=include_deprecated,
+        )
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(
@@ -297,6 +409,113 @@ async def get_manual_detail(
 
     try:
         return await service.get_manual(manual_id)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+
+@router.delete(
+    "/{manual_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete manual draft",
+)
+async def delete_manual(
+    manual_id: UUID,
+    service: ManualService = Depends(get_manual_service),
+) -> None:
+    """
+    DRAFT 상태 메뉴얼 항목 삭제.
+
+    **요청:**
+    - DELETE /manuals/{manual_id}
+
+    **응답:**
+    - 204 No Content: 삭제 성공
+    - 404 Not Found: 메뉴얼을 찾을 수 없음
+    - 400 Bad Request: DRAFT 상태가 아님
+
+    **제약사항:**
+    - DRAFT 상태인 메뉴얼만 삭제 가능
+    - 벡터스토어에서도 삭제됨
+    - 관련 리뷰 태스크도 함께 삭제됨
+    """
+
+    try:
+        await service.delete_manual(manual_id)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{manual_id}/review-tasks",
+    response_model=list[ManualReviewTaskResponse],
+    summary="Get review tasks for a manual",
+)
+async def get_manual_review_tasks(
+    manual_id: UUID,
+    service: ManualService = Depends(get_manual_service),
+) -> list[ManualReviewTaskResponse]:
+    """
+    메뉴얼에 해당하는 검토 로직 정보 조회
+
+    프론트엔드에서 메뉴얼 상세 페이지에서 해당 메뉴얼의 검토 태스크 정보를 불러올 때 사용.
+
+    **요청:**
+    - GET /manuals/{manual_id}/review-tasks
+
+    **응답 (200 OK):**
+    ```json
+    [
+      {
+        "id": "uuid-task-1",
+        "new_entry_id": "uuid-manual-draft",
+        "old_entry_id": "uuid-manual-existing",
+        "similarity": 0.82,
+        "comparison_type": "supplement",
+        "status": "TODO",
+        "reviewer_id": "reviewer-001",
+        "review_notes": null,
+        "new_manual_summary": "신규 메뉴얼 요약",
+        "old_manual_summary": "기존 메뉴얼 요약",
+        "business_type": "INTERNET_BANKING",
+        "business_type_name": "인터넷뱅킹",
+        "new_error_code": "E001",
+        "new_manual_topic": "로그인 실패",
+        "new_manual_keywords": ["로그인", "실패"],
+        "old_business_type": "INTERNET_BANKING",
+        "old_business_type_name": "인터넷뱅킹",
+        "old_error_code": "E001",
+        "old_manual_topic": "로그인 오류",
+        "created_at": "2024-12-10T12:00:00Z",
+        "updated_at": "2024-12-10T12:00:00Z"
+      }
+    ]
+    ```
+
+    **에러 응답:**
+    - 404 Not Found: 메뉴얼을 찾을 수 없음
+
+    **주요 필드:**
+    - new_entry_id: 신규 상담 기반 초안 (검색 대상)
+    - old_entry_id: 기존 메뉴얼 (없으면 신규 생성)
+    - similarity: 기존/신규 유사도 점수 (0-1)
+    - comparison_type: similar/supplement/new (비교 타입)
+    - status: TODO/IN_PROGRESS/DONE/REJECTED (검토 상태)
+    """
+
+    try:
+        return await service.get_review_tasks_by_manual_id(manual_id)
     except RecordNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

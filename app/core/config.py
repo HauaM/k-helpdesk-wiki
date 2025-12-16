@@ -81,6 +81,23 @@ class Settings(BaseSettings):
 
     # Manual Review Configuration
     manual_similarity_threshold: float = 0.85  # Higher threshold for manual updates
+    keyword_compression_min_overlap: int = 2
+    keyword_compression_bonus_weight: float = 0.1
+    keyword_compression_forbidden_keywords: tuple[str, ...] = (
+        "오류",
+        "에러",
+        "error",
+        "실패",
+        "fail",
+        "문제",
+        "issue",
+        "확인",
+        "체크",
+        "check",
+        "조치",
+        "처리",
+        "해결",
+    )
 
     # Security
     secret_key: str = Field(
