@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -25,7 +23,9 @@ from app.core.exceptions import (
     VectorIndexError,
     VectorSearchError,
 )
-from app.schemas.response import ResponseError, ResponseEnvelope, ResponseMeta
+from app.api.response_utils import build_meta
+from app.api.response_utils import build_meta
+from app.schemas.response import ResponseError, ResponseEnvelope
 
 
 EXCEPTION_RESPONSE_MAP: dict[type[Exception], tuple[int, str]] = {
@@ -51,11 +51,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(KHWException, _khw_exception_handler)
     app.add_exception_handler(HTTPException, _http_exception_handler)
     app.add_exception_handler(Exception, _unhandled_exception_handler)
-
-
-def _build_meta(request: Request) -> ResponseMeta:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
-    return ResponseMeta(requestId=request_id, timestamp=datetime.now(timezone.utc))
 
 
 def _serialize_error(
@@ -86,7 +81,7 @@ async def _khw_exception_handler(request: Request, exc: KHWException) -> JSONRes
     status_code, error_code = EXCEPTION_RESPONSE_MAP.get(
         type(exc), (status.HTTP_500_INTERNAL_SERVER_ERROR, DEFAULT_ERROR_CODE)
     )
-    meta = _build_meta(request)
+    meta = build_meta(request)
     message = str(exc)
     details = getattr(exc, "details", None)
     hint = getattr(exc, "hint", None)
@@ -112,7 +107,7 @@ async def _khw_exception_handler(request: Request, exc: KHWException) -> JSONRes
 
 
 async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    meta = _build_meta(request)
+    meta = build_meta(request)
     status_code = exc.status_code
     detail = exc.detail
     message, details = _compress_detail(detail)
@@ -132,7 +127,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
 
 
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    meta = _build_meta(request)
+    meta = build_meta(request)
     message = "Unexpected server error."
     error_payload = _serialize_error(
         exc=exc,

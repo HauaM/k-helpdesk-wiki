@@ -17,6 +17,7 @@ from app.core.db import init_db, close_db
 # Import routers
 from app.routers import auth, consultations, manuals, tasks, common_codes
 from app.api.error_handlers import register_exception_handlers
+from app.api.response_middleware import SuccessEnvelopeMiddleware
 
 logger = get_logger(__name__)
 
@@ -68,6 +69,9 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
     )
+
+    # Success envelope middleware
+    app.add_middleware(SuccessEnvelopeMiddleware)
 
     # CORS Middleware
     app.add_middleware(
