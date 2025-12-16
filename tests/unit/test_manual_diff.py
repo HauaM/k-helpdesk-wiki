@@ -108,7 +108,6 @@ def _make_entry(
     return entry
 
 
-@pytest.mark.asyncio
 async def test_diff_versions_detects_added_removed_modified():
     v1 = _make_version("1", created_at=datetime(2024, 1, 1, tzinfo=timezone.utc))
     v2 = _make_version("2", created_at=datetime(2024, 2, 1, tzinfo=timezone.utc))
@@ -176,8 +175,9 @@ async def test_diff_versions_detects_added_removed_modified():
         consultation_repo=DummyConsultationRepo(),
     )
 
+    # Use base_entry.id instead of "default" string
     diff = await service.diff_versions(
-        "default",
+        base_entry.id,  # Fixed: Use actual UUID instead of "default"
         base_version=None,
         compare_version=None,
         summarize=False,
@@ -196,7 +196,14 @@ async def test_diff_versions_detects_added_removed_modified():
 @pytest.mark.asyncio
 async def test_diff_versions_requires_two_versions():
     v1 = _make_version("1", created_at=datetime(2024, 1, 1, tzinfo=timezone.utc))
-    manual_repo = FakeManualRepo({v1.id: []})
+    
+    # Create an entry with v1 version
+    entry_v1 = _make_entry(
+        topic="Topic1",
+        version_id=v1.id,
+    )
+    
+    manual_repo = FakeManualRepo({v1.id: [entry_v1]})
     version_repo = FakeVersionRepo([v1])
     service = ManualService(
         session=None,
@@ -208,9 +215,10 @@ async def test_diff_versions_requires_two_versions():
         consultation_repo=DummyConsultationRepo(),
     )
 
+    # Use entry_v1.id instead of "default" string
     with pytest.raises(ValidationError):
         await service.diff_versions(
-            "default",
+            entry_v1.id,  # Fixed: Use actual UUID instead of "default"
             base_version=None,
             compare_version=None,
         )

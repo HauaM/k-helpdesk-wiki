@@ -103,45 +103,20 @@ async def search_consultations(
     }
 
 
-@router.post(
-    "/search",
-    response_model=list[ConsultationSearchResult],
-    summary="Search consultations (vector)",
+@router.get(
+    "/{consultation_id}",
+    response_model=ConsultationResponse,
+    summary="Get consultation details",
 )
-async def search_consultations_post(
-    search_request: ConsultationSearchRequest,
+async def get_consultation(
+    consultation_id: str,
     service: ConsultationService = Depends(get_consultation_service),
-) -> list[ConsultationSearchResult]:
-    """FR-3/FR-8: 벡터 기반 상담 검색 (POST)."""
-
-    return await service.search_consultations(search_request)
-
-
-@router.post(
-    "/{consultation_id}/manual-draft",
-    response_model=dict,  # TODO: Use proper ManualEntryResponse
-    summary="Generate manual draft from consultation",
-)
-async def generate_manual_draft(
-    consultation_id: UUID,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> ConsultationResponse:
     """
-    Generate manual draft from consultation using LLM
+    Get detailed consultation information by ID
 
-    RFP Reference: POST /consultations/{id}/manual-draft
-    - LLM extracts keywords
-    - LLM generates manual structure
-    - Returns draft for user review
-
-    TODO: Implement actual logic
+    RFP Reference: GET /consultations/{id}
+    - Returns full consultation details including summary, inquiry, action
+    - Returns user information (employee name)
     """
-    # TODO:
-    # 1. Get consultation by ID
-    # 2. Call ManualService.generate_manual_draft()
-    # 3. Return draft
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Manual draft generation not yet implemented",
-    )
+    return await service.get_consultation(consultation_id)

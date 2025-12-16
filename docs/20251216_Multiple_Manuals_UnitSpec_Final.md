@@ -21,7 +21,7 @@
 ### 1.2 로직 분리에 따른 최소 저장 필드
 
 - **초안/검토 엔티티(`manual_review_tasks` 등 DRAFT/REVIEW 테이블)에 저장 (4)**  
-  `compared_with_manual_id` · `comparison_type (SIMILAR/SUPPLEMENT/NEW)` · `similarity_score` · `compare_version`  
+  `old_entry_id` · `comparison_type (SIMILAR/SUPPLEMENT/NEW)` · `similarity_score` · `compare_version`  
   - 비교 결과(근거)는 승인본이 아닌 **검토 태스크 엔티티**에 둔다. `manual_entries`에는 메뉴얼 고유 데이터만 보관.
   - compare_version으로 당시 룰/threshold를 재현 가능하게 남긴다.
 - **승인 시 저장 (2)**  
@@ -31,7 +31,7 @@
 
 | 구분 | 파일/테이블 | 변경 유형 | 설명 |
 |------|-----------|----------|------|
-| **DB 스키마** | `manual_review_tasks` (DRAFT/REVIEW) | 컬럼 추가 | `compared_with_manual_id`, `comparison_type`, `similarity_score`, `compare_version` (초안 시 저장) |
+| **DB 스키마** | `manual_review_tasks` (DRAFT/REVIEW) | 컬럼 추가 | `old_entry_id`, `comparison_type`, `similarity_score`, `compare_version` (초안 시 저장) |
 | **DB 스키마** | `manual_entries` | 컬럼 추가 | `replaced_manual_id`, `replaced_by_manual_id` (승인 시) |
 | **서비스** | `ComparisonService` | 로직 변경 | 모든 APPROVED 중 best_match 선정, 키워드 압축 단계화 |
 | **서비스** | `ManualService` | 로직 변경 | `/draft`에서 compare 저장, `/approve`에서 후보 변경 가드 + DEPRECATED |
@@ -71,7 +71,7 @@ flowchart TD
     E --> G[사용자 수정/수정 저장]
     F --> G
     G --> H{사용자 액션}
-    H -- 검토요청하기 --> I[Draft 상태=REVIEW READY<br/>manual_review_tasks에 비교 결과 4필드 저장<br/>(compared_with_manual_id, comparison_type, similarity_score, compare_version)]
+    H -- 검토요청하기 --> I["Draft 상태=REVIEW READY<br/>manual_review_tasks에 비교 결과 4필드 저장<br/>(old_entry_id, comparison_type, similarity_score, compare_version)"]
     H -- 삭제 --> J[Draft 삭제]
 ```
 
@@ -82,9 +82,9 @@ flowchart TD
     A[Client: POST /manuals/:id/approve] --> B[ManualService.approve_manual]
     B --> C[가드: APPROVED 후보 변경 여부 확인]
 
-    C --> D{초안 저장된 compared_with_manual_id와<br/>현재 APPROVED best_match 동일?}
+    C --> D{초안 저장된 old_entry_id와<br/>현재 APPROVED best_match 동일?}
     D -- No --> E[승인 중단<br/>재검토 요청]
-    D -- Yes --> F[초안 비교 결과 재사용<br/>(comparison_type, similarity_score)]
+    D -- Yes --> F["초안 비교 결과 재사용<br/>(comparison_type, similarity_score)"]
 
     F --> G{comparison_type?}
     G -- SIMILAR/SUPPLEMENT --> H[best_match 1건만 DEPRECATED<br/>양방향 링크 기록<br/>replaced_manual_id / replaced_by_manual_id]
@@ -171,7 +171,7 @@ def upgrade():
         sa.Column('id', UUID(as_uuid=True), primary_key=True),
         sa.Column('manual_id', UUID(as_uuid=True), sa.ForeignKey('manual_entries.id', ondelete='CASCADE'), nullable=False),
         sa.Column('status', sa.String(20), nullable=False, server_default='DRAFT'),
-        sa.Column('compared_with_manual_id', UUID(as_uuid=True), sa.ForeignKey('manual_entries.id', ondelete='SET NULL'), nullable=True, comment='초안 비교 시 기준이 된 APPROVED 메뉴얼 ID'),
+        sa.Column('old_entry_id', UUID(as_uuid=True), sa.ForeignKey('manual_entries.id', ondelete='SET NULL'), nullable=True, comment='초안 비교 시 기준이 된 APPROVED 메뉴얼 ID'),
         sa.Column('comparison_type', sa.Enum(ComparisonType, name='manual_comparison_type'), nullable=True, comment='초안 비교 결과: SIMILAR/SUPPLEMENT/NEW'),
         sa.Column('similarity_score', sa.Float(), nullable=True, comment='비교 시 계산된 유사도 점수'),
         sa.Column('compare_version', sa.String(20), nullable=True, comment='비교 로직/threshold 버전 키'),
@@ -319,7 +319,7 @@ class ManualReviewTask(BaseModel):
         nullable=False,
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT")
-    compared_with_manual_id: Mapped[UUID | None] = mapped_column(
+    old_entry_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("manual_entries.id", ondelete="SET NULL"),
         nullable=True,
         comment="초안 비교 시 기준이 된 APPROVED 메뉴얼 ID",
@@ -347,7 +347,7 @@ class ManualReviewTask(BaseModel):
 
 - `/approve`는 full 비교를 재실행하지 않는다.
 - 초안 저장 값과 현재 APPROVED best_match의 ID가 다르면 승인 중단 + 재검토 요청.
-- 동일하면 초안에 저장된 `compared_with_manual_id`, `comparison_type`, `similarity_score`, `compare_version`을 그대로 사용해 승인·버전·DEPRECATED를 처리한다.
+- 동일하면 초안에 저장된 `old_entry_id`, `comparison_type`, `similarity_score`, `compare_version`을 그대로 사용해 승인·버전·DEPRECATED를 처리한다.
 
 ---
 
@@ -628,12 +628,12 @@ async def approve_manual(
         manual_id=str(manual_id),
         approver_id=str(request.approver_id),
         comparison_type=review.comparison_type.value,
-        compared_with_manual_id=str(review.compared_with_manual_id) if review.compared_with_manual_id else None,
+        old_entry_id=str(review.old_entry_id) if review.old_entry_id else None,
     )
 
     # Step 1: 가드 - 초안 이후 APPROVED 후보 변경 여부 확인
     current_best = await self.comparison_service.find_best_match_candidate(manual)
-    if current_best and current_best.id != review.compared_with_manual_id:
+    if current_best and current_best.id != review.old_entry_id:
         raise NeedsReReviewError(
             "approved candidate changed after draft; please re-run review"
         )
@@ -657,8 +657,8 @@ async def approve_manual(
         ComparisonType.SIMILAR,
         ComparisonType.SUPPLEMENT,
     ]:
-        if review.compared_with_manual_id:
-            old_manual = await self.manual_repo.get_by_id(review.compared_with_manual_id)
+        if review.old_entry_id:
+            old_manual = await self.manual_repo.get_by_id(review.old_entry_id)
 
             # 양방향 링크 설정
             old_manual.status = ManualStatus.DEPRECATED
@@ -992,7 +992,7 @@ async def test_draft_saves_comparison_fields_and_split_view():
 
     review = await review_task_repo.get_by_manual_id(draft.id)
     assert review.comparison_type == ComparisonType.SIMILAR
-    assert review.compared_with_manual_id == existing.id
+    assert review.old_entry_id == existing.id
     assert review.similarity_score is not None
     assert review.compare_version is not None
 
@@ -1247,7 +1247,7 @@ alembic downgrade -1
 
 ### 11.1 수정 파일
 
-- `app/models/manual.py`: 필드 추가 (compared_with_manual_id, comparison_type, similarity_score, compare_version, replaced_manual_id, replaced_by_manual_id)
+- `app/models/manual.py`: 필드 추가 (old_entry_id, comparison_type, similarity_score, compare_version, replaced_manual_id, replaced_by_manual_id)
 - `app/core/config.py`: 키워드 압축 설정 추가
 - `app/services/comparison_service.py`: 비교 로직 변경 (압축 단계화, 보너스 가산) + 가드용 `find_best_match_candidate`
 - `app/services/manual_service.py`: 초안 비교 결과 저장, 승인 시 가드 + DEPRECATED + 대체 관계 기록

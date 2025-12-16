@@ -7,7 +7,7 @@ from uuid import UUID
 from typing import Dict
 import asyncio
 
-from app.vectorstore.protocol import VectorStoreProtocol, VectorSearchResult
+from app.vectorstore.protocol import VectorSearchResult
 from app.core.exceptions import VectorIndexError, VectorSearchError
 from app.core.logging import get_logger
 
@@ -140,6 +140,23 @@ class MockVectorStore:
             del self._storage[id]
             logger.debug("document_deleted", index=self.index_name, doc_id=str(id))
 
+    async def update_document(
+        self,
+        id: UUID,
+        text: str,
+        metadata: dict | None = None,
+    ) -> None:
+        """
+        Update existing document (delete + re-index)
+
+        Args:
+            id: Document UUID
+            text: New text content
+            metadata: New metadata
+        """
+        await self.delete_document(id)
+        await self.index_document(id, text, metadata)
+
     async def clear_index(self) -> None:
         """
         Clear all documents
@@ -147,3 +164,57 @@ class MockVectorStore:
         count = len(self._storage)
         self._storage.clear()
         logger.info("index_cleared", index=self.index_name, documents_removed=count)
+
+    async def similarity(self, text1: str, text2: str) -> float:
+        """
+        Calculate similarity score between two texts (mock implementation)
+
+        Uses same keyword-overlap logic as search()
+
+        Args:
+            text1: First text
+            text2: Second text
+
+        Returns:
+            Similarity score (0.0 to 1.0)
+        """
+        try:
+            # Simulate async operation
+            await asyncio.sleep(0.01)
+
+            text1_lower = text1.lower()
+            text2_lower = text2.lower()
+
+            # Substring matching
+            substring_score = 0.0
+            if text1_lower in text2_lower or text2_lower in text1_lower:
+                min_len = min(len(text1_lower), len(text2_lower))
+                max_len = max(len(text1_lower), len(text2_lower))
+                substring_score = min_len / max(max_len, 1)
+
+            # Word overlap matching
+            text1_words = set(text1_lower.split())
+            text2_words = set(text2_lower.split())
+            matches = len(text1_words & text2_words)
+
+            overlap_score = 0.0
+            if matches > 0:
+                union = len(text1_words | text2_words)
+                overlap_score = matches / max(union, 1)
+
+            # Use max of both scores
+            score = max(substring_score, overlap_score)
+
+            logger.debug(
+                "similarity_calculated",
+                index=self.index_name,
+                text1_length=len(text1),
+                text2_length=len(text2),
+                score=f"{score:.2f}",
+            )
+
+            return score
+
+        except Exception as e:
+            logger.error("similarity_error", error=str(e))
+            raise VectorSearchError(f"Failed to calculate similarity: {e}")

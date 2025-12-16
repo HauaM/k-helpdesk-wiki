@@ -108,3 +108,19 @@ class VectorStoreProtocol(Protocol):
         WARNING: Destructive operation. Use with caution.
         """
         ...
+
+    async def similarity(self, text1: str, text2: str) -> float:
+        """
+        Calculate similarity score between two texts
+
+        Args:
+            text1: First text to compare
+            text2: Second text to compare
+
+        Returns:
+            Similarity score (0.0 to 1.0, higher is more similar)
+
+        Raises:
+            VectorSearchError: If similarity calculation fails
+        """
+        ...

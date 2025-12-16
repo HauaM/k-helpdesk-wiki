@@ -163,6 +163,33 @@ class PGVectorStore(VectorStoreProtocol):
             await conn.execute(sa_text(f"TRUNCATE TABLE {self.table_name}"))
             logger.warning("pgvector_index_cleared", index=self.index_name)
 
+    async def similarity(self, text1: str, text2: str) -> float:
+        """
+        Calculate similarity score between two texts
+
+        Args:
+            text1: First text
+            text2: Second text
+
+        Returns:
+            Similarity score (0.0 to 1.0)
+        """
+        embedding1 = self._embed_text(text1)
+        embedding2 = self._embed_text(text2)
+
+        # Cosine similarity: dot product of normalized vectors
+        dot_product = sum(a * b for a, b in zip(embedding1, embedding2))
+        similarity_score = (dot_product + 1.0) / 2.0  # Normalize to [0, 1]
+
+        logger.debug(
+            "pgvector_similarity_calculated",
+            text1_length=len(text1),
+            text2_length=len(text2),
+            score=f"{similarity_score:.2f}",
+        )
+
+        return similarity_score
+
     # Internal helpers -------------------------------------------------
 
     async def _ensure_initialized(self) -> None:

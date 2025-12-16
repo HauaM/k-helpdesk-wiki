@@ -89,12 +89,25 @@ class FakeVersionRepository:
             return self._store.get(version_id)
         return None
 
-    async def list_versions(self, limit=100) -> list[ManualVersion]:
-        versions = sorted(
-            self._store.values(),
-            key=lambda v: v.created_at,
-            reverse=True,
-        )
+    async def list_versions(
+        self,
+        business_type: str | None = None,
+        error_code: str | None = None,
+        limit: int = 100,
+    ) -> list[ManualVersion]:
+        """Mock list_versions matching real repository signature"""
+        versions = list(self._store.values())
+        
+        # Filter by business_type and error_code if provided
+        if business_type is not None:
+            versions = [v for v in versions if v.business_type == business_type]
+        if error_code is not None:
+            versions = [v for v in versions if v.error_code == error_code]
+        
+        # Sort by creation time (most recent first)
+        versions.sort(key=lambda v: v.created_at, reverse=True)
+        
+        # Apply limit
         return versions[:limit]
 
     async def create(self, version: ManualVersion) -> ManualVersion:

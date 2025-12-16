@@ -78,6 +78,36 @@ class ConsultationService:
 
         return self._build_consultation_response(consultation)
 
+    async def get_consultation(self, consultation_id: str) -> ConsultationResponse:
+        """상담 상세 조회.
+        
+        Args:
+            consultation_id: 상담 ID (UUID)
+            
+        Returns:
+            ConsultationResponse: 상담 상세 정보
+            
+        Raises:
+            RecordNotFoundError: 상담을 찾을 수 없는 경우
+        """
+        from uuid import UUID
+        from app.core.exceptions import RecordNotFoundError
+        
+        logger.info("consultation_get_request", consultation_id=consultation_id)
+        
+        try:
+            consultation_uuid = UUID(consultation_id)
+        except ValueError as e:
+            raise RecordNotFoundError(f"Invalid consultation ID format: {consultation_id}") from e
+        
+        consultation = await self.repository.get_by_id_with_user(consultation_uuid)
+        
+        if not consultation:
+            raise RecordNotFoundError(f"Consultation not found: {consultation_id}")
+        
+        logger.info("consultation_get_success", consultation_id=consultation_id)
+        return self._build_consultation_response(consultation)
+
     async def _index_consultation_vector(self, consultation: Consultation) -> None:
         """VectorStore 인덱싱 헬퍼.
 

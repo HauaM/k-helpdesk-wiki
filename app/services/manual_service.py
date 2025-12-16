@@ -505,11 +505,12 @@ class ManualService:
             compared_with_manual_id=str(review_task.old_entry_id) if review_task.old_entry_id else None,
         )
 
-        guard_candidate = await self.comparison_service.find_best_match_candidate(manual)
-        if guard_candidate and guard_candidate.id != review_task.old_entry_id:
-            raise NeedsReReviewError(
-                "approved candidate changed after draft; please re-run review"
-            )
+        if review_task.comparison_type in {ComparisonType.SIMILAR, ComparisonType.SUPPLEMENT}:
+            guard_candidate = await self.comparison_service.find_best_match_candidate(manual)
+            if guard_candidate and guard_candidate.id != review_task.old_entry_id:
+                raise NeedsReReviewError(
+                    "approved candidate changed after draft; please re-run review"
+                )
 
         latest_version = await self.version_repo.get_latest_version(
             business_type=manual.business_type,
