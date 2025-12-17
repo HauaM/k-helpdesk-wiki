@@ -627,6 +627,44 @@ class ManualService:
         
         return responses
 
+    async def get_approved_group_by_manual_id(
+        self, manual_id: UUID
+    ) -> list[ManualEntryResponse]:
+        """
+        해당 manual_id와 같은 business_type/error_code를 갖고 있는 APPROVED 항목 목록을 반환.
+        동일 그룹 내 APPROVED 메뉴얼만 조회하며 business_type_name을 붙여서 반환.
+        """
+
+        manual = await self.manual_repo.get_by_id(manual_id)
+        if manual is None:
+            raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
+
+        if not manual.business_type or not manual.error_code:
+            raise BusinessLogicError(
+                f"ManualEntry(id={manual_id}) has no business_type or error_code"
+            )
+
+        entries = await self.manual_repo.find_all_approved_by_group(
+            business_type=manual.business_type,
+            error_code=manual.error_code,
+        )
+
+        business_type_items = await self.common_code_item_repo.get_by_group_code(
+            "BUSINESS_TYPE", is_active_only=True
+        )
+        business_type_map = {
+            item.code_key: item.code_value for item in business_type_items
+        }
+
+        responses: list[ManualEntryResponse] = []
+        for entry in entries:
+            response = await self._enrich_manual_entry_response(
+                entry, business_type_map=business_type_map
+            )
+            responses.append(response)
+
+        return responses
+
     async def get_manual_versions_by_group(
         self,
         business_type: str,
