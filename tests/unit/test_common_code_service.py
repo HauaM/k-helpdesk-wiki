@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Base, CommonCodeGroup, CommonCodeItem
-from app.services.common_code_service import CommonCodeService
+from app.services.common_code_service import (
+    CommonCodeService,
+    FORBIDDEN_KEYWORD_GROUP_CODE,
+)
 from app.schemas.common_code import (
     CommonCodeGroupCreate,
     CommonCodeGroupUpdate,
@@ -477,3 +480,41 @@ async def test_item_with_attributes(common_code_service):
     # Retrieve and verify attributes
     retrieved = await common_code_service.get_item(result.id)
     assert retrieved.attributes == {"color": "red", "icon": "star"}
+
+
+@pytest.mark.asyncio
+async def test_get_forbidden_keywords_returns_values(common_code_service):
+    """
+    금칙 키워드 그룹이 있을 경우 code_value 목록을 반환해야 한다.
+    """
+    group_payload = CommonCodeGroupCreate(
+        group_code=FORBIDDEN_KEYWORD_GROUP_CODE,
+        group_name="금칙 키워드",
+    )
+    group = await common_code_service.create_group(group_payload)
+
+    item_payload = CommonCodeItemCreate(
+        code_key="BLOCKED",
+        code_value="금칙",
+        sort_order=1,
+    )
+    await common_code_service.create_item(group.id, item_payload)
+
+    result = await common_code_service.get_forbidden_keywords()
+
+    assert result == ["금칙"]
+
+
+@pytest.mark.asyncio
+async def test_get_forbidden_keywords_empty_without_items(common_code_service):
+    """
+    항목이 없으면 빈 리스트를 반환해야 한다.
+    """
+    group_payload = CommonCodeGroupCreate(
+        group_code=FORBIDDEN_KEYWORD_GROUP_CODE,
+        group_name="금칙 키워드",
+    )
+    await common_code_service.create_group(group_payload)
+
+    result = await common_code_service.get_forbidden_keywords()
+    assert result == []

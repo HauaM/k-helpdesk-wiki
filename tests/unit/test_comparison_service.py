@@ -22,10 +22,12 @@ from app.services.comparison_service import (
     ComparisonService,
     ComparisonResult,
     COMPARISON_VERSION,
+    FORBIDDEN_KEYWORD_HINT,
 )
 from app.repositories.manual_rdb import ManualEntryRDBRepository
 from app.vectorstore.protocol import VectorSearchResult
 from app.core.exceptions import RecordNotFoundError, VectorSearchError
+from app.services.common_code_service import CommonCodeService
 
 
 # ============================================================================
@@ -48,18 +50,32 @@ def mock_vectorstore():
 
 
 @pytest.fixture
+def mock_common_code_service():
+    """Mock CommonCodeService"""
+    service = AsyncMock(spec=CommonCodeService)
+    service.get_forbidden_keywords.return_value = ["금칙"]
+    return service
+
+
+@pytest.fixture
 def mock_session():
     """Mock AsyncSession"""
     return AsyncMock()
 
 
 @pytest.fixture
-def comparison_service(mock_session, mock_manual_repo, mock_vectorstore):
+def comparison_service(
+    mock_session,
+    mock_manual_repo,
+    mock_vectorstore,
+    mock_common_code_service,
+):
     """ComparisonService instance with mocked dependencies"""
     service = ComparisonService(
         session=mock_session,
         manual_repo=mock_manual_repo,
         vectorstore=mock_vectorstore,
+        common_code_service=mock_common_code_service,
     )
     return service
 
@@ -440,6 +456,25 @@ async def test_vectorstore_unavailable_fallback(
     assert result.comparison_type == ComparisonType.NEW
     assert result.existing_manual is None
 
+
+@pytest.mark.asyncio
+async def test_missing_forbidden_keywords_appends_hint(
+    comparison_service, mock_manual_repo, mock_vectorstore,
+    sample_draft_manual, sample_approved_manual, mock_common_code_service
+):
+    """
+    ComparisonResult.reason should include hint when forbidden keywords are not configured.
+    """
+    mock_common_code_service.get_forbidden_keywords.return_value = []
+    mock_manual_repo.find_latest_by_group.return_value = sample_approved_manual
+    mock_vectorstore.similarity.return_value = 0.95
+
+    result = await comparison_service.compare(
+        new_draft=sample_draft_manual,
+        compare_with_manual_id=None,
+    )
+
+    assert FORBIDDEN_KEYWORD_HINT in result.reason
 
 # ============================================================================
 # Test: User-Selected Manual Lookup

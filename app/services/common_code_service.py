@@ -39,6 +39,7 @@ from app.schemas.common_code import (
 )
 
 logger = get_logger(__name__)
+FORBIDDEN_KEYWORD_GROUP_CODE = "MANUAL_FORBIDDEN_KEYWORDS"
 
 
 class CommonCodeService:
@@ -647,6 +648,36 @@ class CommonCodeService:
                 for item in items
             ] if items else []
         )
+
+    async def get_forbidden_keywords(self) -> list[str]:
+        """
+        금칙 키워드 그룹(MANUAL_FORBIDDEN_KEYWORDS)의 활성 항목으로부터 code_value를 조회합니다.
+        """
+        items = await self.item_repo.get_by_group_code(
+            FORBIDDEN_KEYWORD_GROUP_CODE,
+            is_active_only=True,
+        )
+
+        if not items:
+            logger.info(
+                "get_forbidden_keywords_empty",
+                group_code=FORBIDDEN_KEYWORD_GROUP_CODE,
+            )
+            return []
+
+        values = [
+            item.code_value.strip()
+            for item in items
+            if item.code_value and item.code_value.strip()
+        ]
+
+        logger.debug(
+            "get_forbidden_keywords_loaded",
+            group_code=FORBIDDEN_KEYWORD_GROUP_CODE,
+            keyword_count=len(values),
+        )
+
+        return values
 
     async def get_multiple_code_groups(
         self, group_codes: list[str], is_active_only: bool = True

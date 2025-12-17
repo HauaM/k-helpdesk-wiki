@@ -20,15 +20,14 @@ from app.core.logging import get_logger
 from app.models.manual import ManualEntry, ManualStatus
 from app.models.task import ComparisonType
 from app.repositories.manual_rdb import ManualEntryRDBRepository
+from app.services.common_code_service import CommonCodeService
 from app.vectorstore.protocol import VectorStoreProtocol
 
 logger = get_logger(__name__)
 
 KEYWORD_COMPRESSION_MIN_OVERLAP = settings.keyword_compression_min_overlap
 KEYWORD_COMPRESSION_BONUS_WEIGHT = settings.keyword_compression_bonus_weight
-KEYWORD_COMPRESSION_FORBIDDEN_KEYWORDS = frozenset(
-    settings.keyword_compression_forbidden_keywords
-)
+FORBIDDEN_KEYWORD_HINT = "hint_missing_forbidden_keywords"
 COMPARISON_VERSION = (
     f"kw{KEYWORD_COMPRESSION_MIN_OVERLAP}_bonus{int(KEYWORD_COMPRESSION_BONUS_WEIGHT * 100)}"
 )
@@ -54,10 +53,13 @@ class ComparisonService:
         session: AsyncSession,
         vectorstore: VectorStoreProtocol | None = None,
         manual_repo: ManualEntryRDBRepository | None = None,
+        common_code_service: CommonCodeService | None = None,
     ) -> None:
         self.session = session
         self.vectorstore = vectorstore
         self.manual_repo = manual_repo or ManualEntryRDBRepository(session)
+        self.common_code_service = common_code_service or CommonCodeService(session)
+        self._missing_forbidden_keyword_hint = False
 
     async def compare(
         self,
@@ -71,16 +73,19 @@ class ComparisonService:
         신규 draft를 검토 후 best_match를 찾아 comparison_type을 판정한다.
         """
 
+        forbidden_keywords, missing_keyword_hint = await self._load_forbidden_keywords()
+        self._missing_forbidden_keyword_hint = missing_keyword_hint
+
         candidates = await self._collect_candidates(new_draft, compare_with_manual_id)
         if not candidates:
             return ComparisonResult(
                 comparison_type=ComparisonType.NEW,
-                reason="no_candidates",
+                reason=self._with_keyword_hint("no_candidates"),
                 compare_version=COMPARISON_VERSION,
             )
 
         filtered_candidates, keyword_scores = self._apply_keyword_compression(
-            new_draft, candidates
+            new_draft, candidates, forbidden_keywords
         )
 
         best_match, best_similarity = await self._select_best_candidate(
@@ -90,7 +95,7 @@ class ComparisonService:
         if best_match is None:
             return ComparisonResult(
                 comparison_type=ComparisonType.NEW,
-                reason="no_vector_results",
+                reason=self._with_keyword_hint("no_vector_results"),
                 compare_version=COMPARISON_VERSION,
             )
 
@@ -105,7 +110,7 @@ class ComparisonService:
             comparison_type=comparison_type,
             existing_manual=best_match if comparison_type != ComparisonType.NEW else None,
             similarity_score=best_similarity,
-            reason=f"similarity_{best_similarity:.2f}",
+            reason=self._with_keyword_hint(f"similarity_{best_similarity:.2f}"),
             compare_version=COMPARISON_VERSION,
         )
 
@@ -116,12 +121,15 @@ class ComparisonService:
         """
         최초 비교 및 guard용으로 best_match만 재검증할 때 사용.
         """
+        forbidden_keywords, missing_keyword_hint = await self._load_forbidden_keywords()
+        self._missing_forbidden_keyword_hint = missing_keyword_hint
+
         candidates = await self._collect_candidates(new_draft, None)
         if not candidates:
             return None
 
         filtered_candidates, keyword_scores = self._apply_keyword_compression(
-            new_draft, candidates
+            new_draft, candidates, forbidden_keywords
         )
 
         best_match, _ = await self._select_best_candidate(
@@ -165,6 +173,7 @@ class ComparisonService:
         self,
         new_draft: ManualEntry,
         candidates: Iterable[ManualEntry],
+        forbidden_keywords: frozenset[str],
     ) -> tuple[list[ManualEntry], dict[UUID, int]]:
         keyword_scores: dict[UUID, int] = {}
         filtered_candidates: list[ManualEntry] = list(candidates)
@@ -173,13 +182,13 @@ class ComparisonService:
         if not new_draft.keywords:
             return filtered_candidates, keyword_scores
 
-        valid_keywords = self._filter_valid_keywords(new_draft.keywords)
+        valid_keywords = self._filter_valid_keywords(new_draft.keywords, forbidden_keywords)
         if not valid_keywords:
             return filtered_candidates, keyword_scores
 
         overlaps: list[tuple[ManualEntry, int]] = []
         for candidate in filtered_candidates:
-            candidate_keywords = self._filter_valid_keywords(candidate.keywords or [])
+            candidate_keywords = self._filter_valid_keywords(candidate.keywords or [], forbidden_keywords)
             overlap = len(set(valid_keywords) & set(candidate_keywords))
             overlaps.append((candidate, overlap))
             keyword_scores[candidate.id] = overlap
@@ -253,10 +262,47 @@ class ComparisonService:
 
         return best_match, best_similarity
 
-    def _filter_valid_keywords(self, keywords: Iterable[str]) -> list[str]:
-        return [
-            kw for kw in keywords if kw.lower() not in KEYWORD_COMPRESSION_FORBIDDEN_KEYWORDS
-        ]
+    def _filter_valid_keywords(
+        self,
+        keywords: Iterable[str],
+        forbidden_keywords: frozenset[str],
+    ) -> list[str]:
+        filtered_keywords: list[str] = []
+        for keyword in keywords:
+            if not keyword:
+                continue
+            normalized = keyword.strip()
+            if not normalized:
+                continue
+            if normalized.lower() in forbidden_keywords:
+                continue
+            filtered_keywords.append(normalized)
+        return filtered_keywords
+
+    async def _load_forbidden_keywords(self) -> tuple[frozenset[str], bool]:
+        try:
+            raw_keywords = await self.common_code_service.get_forbidden_keywords()
+        except Exception as exc:
+            logger.warning(
+                "comparison_forbidden_keywords_fetch_failed",
+                error=str(exc),
+            )
+            return frozenset(), True
+
+        normalized_keywords = frozenset(
+            value.strip().lower()
+            for value in raw_keywords
+            if isinstance(value, str) and value.strip()
+        )
+
+        return normalized_keywords, len(normalized_keywords) == 0
+
+    def _with_keyword_hint(self, reason: str) -> str:
+        if self._missing_forbidden_keyword_hint:
+            if reason:
+                return f"{reason};{FORBIDDEN_KEYWORD_HINT}"
+            return FORBIDDEN_KEYWORD_HINT
+        return reason
 
     def _build_manual_text(self, manual: ManualEntry) -> str:
         return f"{manual.topic}\n{manual.background}\n{manual.guideline}"
