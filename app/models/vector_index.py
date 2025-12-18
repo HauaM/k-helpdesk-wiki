@@ -19,8 +19,9 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.sqlalchemy_types import JSONB, PGArray
 
 from app.models.base import BaseModel
 
@@ -66,7 +67,7 @@ class ConsultationVectorIndex(BaseModel):
         unique=True,
     )
     embedding: Mapped[list[float]] = mapped_column(
-        ARRAY(Float),
+        PGArray(Float),
         nullable=False,
         comment="임베딩 벡터",
     )
@@ -107,7 +108,7 @@ class ManualVectorIndex(BaseModel):
         unique=True,
     )
     embedding: Mapped[list[float]] = mapped_column(
-        ARRAY(Float),
+        PGArray(Float),
         nullable=False,
     )
     metadata_json: Mapped[dict[str, Any]] = mapped_column(

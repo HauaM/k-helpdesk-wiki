@@ -9,8 +9,10 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.sqlalchemy_types import JSONB
 
 from app.models.base import BaseModel
 
