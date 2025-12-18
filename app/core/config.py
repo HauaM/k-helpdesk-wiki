@@ -48,11 +48,18 @@ class Settings(BaseSettings):
 
     # VectorStore
     vectorstore_type: Literal["mock", "pgvector", "pinecone", "qdrant"] = "mock"
-    vectorstore_dimension: int = 1536  # OpenAI embedding dimension
+    vectorstore_dimension: int = 384  # E5 embedding dimension (was 1536 for OpenAI)
 
     # PGVector specific (when vectorstore_type == "pgvector")
     pgvector_table_consultation: str = "consultation_vectors"
     pgvector_table_manual: str = "manual_vectors"
+
+    # Embedding Service (E5 Model)
+    # Unit Spec v1.1: ASYNC SAFETY, E5 USAGE RULES, LIFECYCLE INTEGRATION
+    embedding_model: Literal["e5"] = "e5"
+    e5_model_name: str = "dragonkue/multilingual-e5-small-ko-v2"
+    embedding_device: Literal["cpu", "cuda"] = "cpu"  # GPU if available, otherwise CPU
+    embedding_max_concurrency: int = 4  # Max concurrent embedding operations (threadpool limit)
 
     # LLM Configuration
     llm_provider: Literal["openai", "anthropic", "mock", "ollama"] = "mock"

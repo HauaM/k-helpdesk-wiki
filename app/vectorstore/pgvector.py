@@ -1,16 +1,18 @@
 """
 PGVector VectorStore implementation.
 
-Uses PostgreSQL + pgvector extension to persist embeddings. Embeddings are derived
-locally via a lightweight hashed bag-of-words so the service can run without an
-external embedding provider. Replace `_embed_text` with a real embedder when ready.
+Uses PostgreSQL + pgvector extension to persist embeddings derived from
+local E5 semantic model. All embedding operations use EmbeddingService
+with async-safe threadpool executor wrapping.
+
+Reference: Unit Specification v1.1
+- ASYNC SAFETY: Embeddings via EmbeddingService with executor wrapping
+- E5 USAGE: "query:" for searches, "passage:" for documents
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import math
 import re
 from datetime import datetime
 from typing import Any
@@ -25,15 +27,21 @@ from app.core.config import settings
 from app.core.db import get_async_engine
 from app.core.logging import get_logger
 from app.vectorstore.protocol import VectorStoreProtocol, VectorSearchResult
+from app.llm.embedder import get_embedding_service
 
 logger = get_logger(__name__)
 
 
 class PGVectorStore(VectorStoreProtocol):
-    """Simple pgvector-backed VectorStore.
+    """PostgreSQL + pgvector-backed VectorStore.
 
-    Embeddings: deterministic hashed bag-of-words to avoid external calls.
+    Uses local E5 semantic embeddings with async-safe operations.
+    All embeddings routed through EmbeddingService with E5 prefixes.
     Storage: single table per index (consultations/manuals) with JSON metadata.
+
+    Unit Spec v1.1 Compliance:
+    - ✅ ASYNC SAFETY: Embeddings via EmbeddingService.embed_query/passage()
+    - ✅ E5 USAGE: Query/passage prefixes applied automatically
     """
 
     def __init__(self, index_name: str, engine: AsyncEngine | None = None) -> None:
@@ -41,6 +49,7 @@ class PGVectorStore(VectorStoreProtocol):
         self.engine = engine or get_async_engine()
         self.dimension = settings.vectorstore_dimension
         self.table_name = self._resolve_table_name(index_name)
+        self.embedding_service = get_embedding_service()
         self._init_lock = asyncio.Lock()
         self._initialized = False
 
@@ -52,7 +61,8 @@ class PGVectorStore(VectorStoreProtocol):
     ) -> None:
         await self._ensure_initialized()
 
-        embedding = self._embed_text(text)
+        # Use EmbeddingService with "passage:" prefix (E5 requirement)
+        embedding = await self.embedding_service.embed_passage(text)
         metadata = metadata or {}
         metadata_json = self._normalize_metadata(metadata)
 
@@ -80,16 +90,13 @@ class PGVectorStore(VectorStoreProtocol):
                 created_at = COALESCE(EXCLUDED.created_at, {self.table_name}.created_at)
         """
 
-        stmt = (
-            sa_text(upsert_sql)
-            .bindparams(
-                bindparam("id", type_=PGUUID()),
-                bindparam("embedding", type_=Vector(self.dimension)),
-                bindparam("metadata", type_=JSONB),
-                bindparam("branch_code", type_=String()),
-                bindparam("business_type", type_=String()),
-                bindparam("error_code", type_=String()),
-            )
+        stmt = sa_text(upsert_sql).bindparams(
+            bindparam("id", type_=PGUUID()),
+            bindparam("embedding", type_=Vector(self.dimension)),
+            bindparam("metadata", type_=JSONB),
+            bindparam("branch_code", type_=String()),
+            bindparam("business_type", type_=String()),
+            bindparam("error_code", type_=String()),
         )
 
         async with self.engine.begin() as conn:
@@ -104,7 +111,8 @@ class PGVectorStore(VectorStoreProtocol):
     ) -> list[VectorSearchResult]:
         await self._ensure_initialized()
 
-        query_embedding = self._embed_text(query)
+        # Use EmbeddingService with "query:" prefix (E5 requirement)
+        query_embedding = await self.embedding_service.embed_query(query)
         filters: list[str] = []
         params: dict[str, Any] = {"embedding": query_embedding, "limit": top_k}
 
@@ -165,27 +173,36 @@ class PGVectorStore(VectorStoreProtocol):
 
     async def similarity(self, text1: str, text2: str) -> float:
         """
-        Calculate similarity score between two texts
+        Calculate cosine similarity between query (text1) and passage (text2).
+
+        Uses E5 query/passage prefixes for consistency with search operations.
+
+        **CORRECTED (Item 2)**: Now uses similarity_query_passage() with E5 prefixes
+        to maintain consistency with search embeddings and avoid threshold drift.
 
         Args:
-            text1: First text
-            text2: Second text
+            text1: Query text (will be prefixed with "query:")
+            text2: Passage text (will be prefixed with "passage:")
 
         Returns:
-            Similarity score (0.0 to 1.0)
-        """
-        embedding1 = self._embed_text(text1)
-        embedding2 = self._embed_text(text2)
+            Cosine similarity score in range [-1, 1]
+            (Practically [0, 1] for E5, but theoretically [-1, 1])
 
-        # Cosine similarity: dot product of normalized vectors
-        dot_product = sum(a * b for a, b in zip(embedding1, embedding2))
-        similarity_score = (dot_product + 1.0) / 2.0  # Normalize to [0, 1]
+        Unit Spec v1.1 (CORRECTED):
+        - Uses EmbeddingService.similarity_query_passage() with E5 prefixes
+        - Consistent with search operation embeddings
+        - Correct math: cosine ∈ [-1, 1] for L2-normalized vectors
+        """
+        # Item 2 Fix: Use query/passage prefixes for consistency
+        similarity_score = await self.embedding_service.similarity_query_passage(
+            query_text=text1, passage_text=text2
+        )
 
         logger.debug(
             "pgvector_similarity_calculated",
             text1_length=len(text1),
             text2_length=len(text2),
-            score=f"{similarity_score:.2f}",
+            score=f"{similarity_score:.4f}",
         )
 
         return similarity_score
@@ -225,9 +242,7 @@ class PGVectorStore(VectorStoreProtocol):
 
         # Optional helper indexes for metadata filters
         branch_idx = f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_branch ON {self.table_name} (branch_code)"
-        business_idx = (
-            f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_business ON {self.table_name} (business_type)"
-        )
+        business_idx = f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_business ON {self.table_name} (business_type)"
         error_idx = f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_error ON {self.table_name} (error_code)"
 
         async with self.engine.begin() as conn:
@@ -241,7 +256,7 @@ class PGVectorStore(VectorStoreProtocol):
             await conn.execute(sa_text(error_idx))
             logger.info("pgvector_table_ready", table=self.table_name, dimension=self.dimension)
 
-    async def _recreate_table_if_incompatible(self, conn) -> None:
+    async def _recreate_table_if_incompatible(self, conn: Any) -> None:
         """Drop and recreate table if existing schema is incompatible.
 
         If the table exists with a non-UUID id or leftover columns (e.g., consultation_id bigint),
@@ -265,11 +280,7 @@ class PGVectorStore(VectorStoreProtocol):
         id_type = col_map.get("id")
         has_consultation_id = "consultation_id" in col_map
 
-        compatible = (
-            id_type is not None
-            and id_type[0] == "uuid"
-            and not has_consultation_id
-        )
+        compatible = id_type is not None and id_type[0] == "uuid" and not has_consultation_id
 
         if compatible:
             return
@@ -298,25 +309,6 @@ class PGVectorStore(VectorStoreProtocol):
             raise ValueError(f"Unsafe table name: {table_name}")
 
         return table_name
-
-    def _embed_text(self, text: str) -> list[float]:
-        """Deterministic hashed bag-of-words embedding.
-
-        This avoids external API calls while providing stable vectors for the
-        same input text. Replace with real embeddings once an embedding client
-        is available.
-        """
-
-        tokens = re.findall(r"[\w']+", text.lower())
-        vector = [0.0] * self.dimension
-
-        for token in tokens:
-            digest = hashlib.sha256(token.encode("utf-8")).digest()
-            bucket = int.from_bytes(digest[:4], "big") % self.dimension
-            vector[bucket] += 1.0
-
-        norm = math.sqrt(sum(v * v for v in vector)) or 1.0
-        return [v / norm for v in vector]
 
     def _normalize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         """Convert metadata to JSON-serializable values (datetimes -> isoformat)."""

@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
-from app.core.db import init_db, close_db
+from app.core.db import close_db
+from app.llm.embedder import get_embedding_service
 
 # Import routers
 from app.routers import auth, consultations, manuals, tasks, common_codes
@@ -30,9 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Startup:
         - Configure logging
         - Initialize database (dev only)
+        - Preload embedding service (E5 model)
 
     Shutdown:
         - Close database connections
+
+    Unit Spec v1.1: LIFECYCLE INTEGRATION
+    - Embedding service loaded at startup with warmup
+    - Prevents first request from triggering slow model download
+    - Fast-fail semantics: raises error if model loading fails
     """
     # Startup
     logger.info("application_startup", environment=settings.environment)
@@ -42,6 +49,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.environment == "development":
         logger.info("initializing_database_tables")
         # await init_db()  # Uncomment when models are ready
+
+    # Preload embedding service with model warmup (Unit Spec v1.1)
+    try:
+        logger.info(
+            "embedding_service_startup",
+            model=settings.e5_model_name,
+            device=settings.embedding_device,
+        )
+        embedding_service = get_embedding_service()
+        await embedding_service.warmup()
+        logger.info("embedding_service_ready", model=settings.e5_model_name)
+    except Exception as e:
+        logger.critical("embedding_service_startup_failed", error=str(e))
+        raise
 
     yield
 

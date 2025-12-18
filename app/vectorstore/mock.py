@@ -1,6 +1,13 @@
 """
 Mock VectorStore Implementation
-In-memory implementation for development/testing
+In-memory implementation for development/testing.
+
+Uses EmbeddingService for semantic embeddings (E5 model).
+All embedding operations are async-safe and include E5 prefixes.
+
+Reference: Unit Specification v1.1
+- ASYNC SAFETY: Embeddings via EmbeddingService with executor wrapping
+- E5 USAGE: "query:" for searches, "passage:" for documents
 """
 
 from uuid import UUID
@@ -10,16 +17,21 @@ import asyncio
 from app.vectorstore.protocol import VectorSearchResult
 from app.core.exceptions import VectorIndexError, VectorSearchError
 from app.core.logging import get_logger
+from app.llm.embedder import get_embedding_service
 
 logger = get_logger(__name__)
 
 
 class MockVectorStore:
     """
-    Mock VectorStore using in-memory dictionary
+    Mock VectorStore using in-memory dictionary.
 
-    RFP Reference: Section 2 - Mock implementation
-    Uses simple text matching instead of real embeddings
+    Uses EmbeddingService for semantic embeddings (E5 model).
+    All embedding operations are async-safe with proper E5 prefixes.
+
+    Unit Spec v1.1 Compliance:
+    - ✅ ASYNC SAFETY: Embeddings via EmbeddingService
+    - ✅ E5 USAGE: Query/passage prefixes applied automatically
     """
 
     def __init__(self, index_name: str):
@@ -31,6 +43,7 @@ class MockVectorStore:
         """
         self.index_name = index_name
         self._storage: Dict[UUID, tuple[str, dict | None]] = {}
+        self.embedding_service = get_embedding_service()
         logger.info("mock_vectorstore_initialized", index_name=index_name)
 
     async def index_document(
@@ -69,7 +82,10 @@ class MockVectorStore:
         metadata_filter: dict | None = None,
     ) -> list[VectorSearchResult]:
         """
-        Simple keyword-based search (mock implementation)
+        Semantic search using E5 embeddings (mock implementation).
+
+        Uses EmbeddingService for async-safe embedding operations.
+        All embeddings include proper E5 prefixes.
 
         Args:
             query: Query text
@@ -77,36 +93,28 @@ class MockVectorStore:
             metadata_filter: Optional filters (not implemented in mock)
 
         Returns:
-            List of search results
+            List of search results sorted by semantic similarity
+
+        Unit Spec v1.1:
+        - ASYNC SAFETY: Uses EmbeddingService.embed_query() with executor
+        - E5 USAGE: Query embedding includes "query:" prefix
         """
         try:
-            # Simulate async operation
-            await asyncio.sleep(0.02)
-
-            query_lower = query.lower()
+            # Embed query using EmbeddingService with "query:" prefix
+            query_embedding = await self.embedding_service.embed_query(query)
             results = []
 
+            # Calculate similarity for each stored document
             for doc_id, (text, metadata) in self._storage.items():
-                # Simple keyword matching (not real vector similarity)
-                text_lower = text.lower()
+                # Embed document using EmbeddingService with "passage:" prefix
+                doc_embedding = await self.embedding_service.embed_passage(text)
 
-                # Simple substring + word-overlap matching
-                substring_score = 0.0
-                if query_lower in text_lower:
-                    substring_score = min(len(query_lower) / max(len(text_lower), 1), 1.0)
+                # Cosine similarity: dot product of L2-normalized vectors
+                score = sum(a * b for a, b in zip(query_embedding, doc_embedding))
 
-                query_words = set(query_lower.split())
-                text_words = set(text_lower.split())
-                matches = len(query_words & text_words)
-
-                overlap_score = 0.0
-                if matches > 0:
-                    overlap_score = min(matches / len(query_words), 1.0)
-
-                score = max(substring_score, overlap_score)
                 if score > 0:
                     results.append(
-                        VectorSearchResult(id=doc_id, score=score, metadata=metadata)
+                        VectorSearchResult(id=doc_id, score=float(score), metadata=metadata)
                     )
 
             # Sort by score descending
@@ -167,50 +175,38 @@ class MockVectorStore:
 
     async def similarity(self, text1: str, text2: str) -> float:
         """
-        Calculate similarity score between two texts (mock implementation)
+        Calculate cosine similarity between query (text1) and passage (text2).
 
-        Uses same keyword-overlap logic as search()
+        Uses E5 query/passage prefixes for consistency with search operations.
+
+        **CORRECTED (Item 2)**: Now uses similarity_query_passage() with E5 prefixes
+        to maintain consistency with search embeddings and avoid threshold drift.
 
         Args:
-            text1: First text
-            text2: Second text
+            text1: Query text (will be prefixed with "query:")
+            text2: Passage text (will be prefixed with "passage:")
 
         Returns:
-            Similarity score (0.0 to 1.0)
+            Cosine similarity score in range [-1, 1]
+            (Practically [0, 1] for E5, but theoretically [-1, 1])
+
+        Unit Spec v1.1 (CORRECTED):
+        - Uses EmbeddingService.similarity_query_passage() with E5 prefixes
+        - Consistent with search operation embeddings
+        - Correct math: cosine ∈ [-1, 1] for L2-normalized vectors
         """
         try:
-            # Simulate async operation
-            await asyncio.sleep(0.01)
-
-            text1_lower = text1.lower()
-            text2_lower = text2.lower()
-
-            # Substring matching
-            substring_score = 0.0
-            if text1_lower in text2_lower or text2_lower in text1_lower:
-                min_len = min(len(text1_lower), len(text2_lower))
-                max_len = max(len(text1_lower), len(text2_lower))
-                substring_score = min_len / max(max_len, 1)
-
-            # Word overlap matching
-            text1_words = set(text1_lower.split())
-            text2_words = set(text2_lower.split())
-            matches = len(text1_words & text2_words)
-
-            overlap_score = 0.0
-            if matches > 0:
-                union = len(text1_words | text2_words)
-                overlap_score = matches / max(union, 1)
-
-            # Use max of both scores
-            score = max(substring_score, overlap_score)
+            # Item 2 Fix: Use query/passage prefixes for consistency
+            score = await self.embedding_service.similarity_query_passage(
+                query_text=text1, passage_text=text2
+            )
 
             logger.debug(
                 "similarity_calculated",
                 index=self.index_name,
                 text1_length=len(text1),
                 text2_length=len(text2),
-                score=f"{score:.2f}",
+                score=f"{score:.4f}",
             )
 
             return score

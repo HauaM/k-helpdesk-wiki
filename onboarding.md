@@ -488,6 +488,71 @@ ConsultationService.search_consultations()
 응답 (정렬된 결과)
 ```
 
+### 📌 벡터 DB 임베딩 상세 분석 (NEW) ⭐
+
+#### 임베딩 시점과 데이터
+
+**상담(Consultation) 임베딩:**
+```
+POST /api/v1/consultations 호출
+  ↓
+1️⃣ ConsultationRepository.create() → RDB 저장 (COMMITTED)
+  ↓
+2️⃣ _index_consultation_vector(consultation) 호출
+   ├─ 임베딩 텍스트: [요약] + [문의] + [조치]
+   ├─ 메타데이터: branch_code, business_type, error_code, created_at
+   └─ VectorStore.index_document() 실행
+       └─ mock: 메모리 저장 | pgvector: consultation_vectors 테이블 INSERT
+  ↓
+3️⃣ 실패 시 RetryQueueJob 등록 (백그라운드 재시도)
+  ↓
+응답 (201 Created) - 임베딩 실패해도 RDB는 안전 ✅
+```
+
+**매뉴얼(Manual) 임베딩 (승인 시점에만):**
+```
+POST /api/v1/manual-review/tasks/{id}/approve 호출
+  ↓
+1️⃣ manual.status = DRAFT → APPROVED 변경
+  ↓
+2️⃣ ManualVersion 생성 (버전 관리)
+  ↓
+3️⃣ _index_manual_vector(manual) 호출
+   ├─ 임베딩 텍스트: [키워드] + [주제] + [배경] + [가이드라인]
+   ├─ 메타데이터: business_type, error_code, created_at
+   └─ VectorStore.index_document() 실행 (UPSERT)
+       └─ mock: 메모리 저장 | pgvector: manual_vectors 테이블 UPSERT
+  ↓
+응답 (200 OK) - APPROVED 상태로만 검색에 노출
+```
+
+**핵심 포인트:**
+- ✅ Consultation: **등록 직후** 즉시 임베딩 (동기)
+- ✅ Manual: **승인 시점**에만 임베딩 (DRAFT는 벡터스토어에 저장 안 함)
+- ✅ 메타데이터 필터링: branch_code, business_type, error_code로 최적화된 검색
+- ✅ UPSERT 방식: 재인덱싱 시 기존 벡터 자동 업데이트
+- ✅ RDB 우선: 임베딩 실패해도 RDB에는 데이터 저장됨
+
+#### VectorStore 저장소
+
+| 항목 | Consultation | Manual |
+|------|-------------|--------|
+| **임베딩 시점** | 등록 직후 | 승인 시 |
+| **포함 텍스트** | 요약, 문의, 조치 | 키워드, 주제, 배경, 가이드라인 |
+| **메타데이터** | branch_code, business_type, error_code, created_at | business_type, error_code, created_at |
+| **저장소** | mock: 메모리 / pgvector: consultation_vectors | mock: 메모리 / pgvector: manual_vectors |
+| **검색 노출** | ✅ 즉시 (모든 상담) | ✅ APPROVED만 |
+| **RDB 추적** | ❌ consultation_vector_index 미사용 | ❌ manual_vector_index 미사용 |
+
+#### 코드 위치
+- Consultation 임베딩: [app/services/consultation_service.py:54-78](app/services/consultation_service.py#L54), [110-134](app/services/consultation_service.py#L110)
+- Manual 임베딩: [app/services/manual_service.py:482-550](app/services/manual_service.py#L482), [1215-1238](app/services/manual_service.py#L1215)
+- VectorStore 추상화: [app/vectorstore/protocol.py](app/vectorstore/protocol.py)
+- Mock 구현: [app/vectorstore/mock.py](app/vectorstore/mock.py)
+- pgvector 구현: [app/vectorstore/pgvector.py](app/vectorstore/pgvector.py)
+
+---
+
 ### 3️⃣ 매뉴얼 초안 생성 + 스마트 비교 (v2.1) ✨
 
 ```
@@ -1065,6 +1130,56 @@ OLLAMA_TIMEOUT=300  # 초 단위
 - VectorStore 미구성 → NEW로 처리
 - VectorStore 오류 → NEW로 처리
 - "정보 손실보다 중복이 낫다" 철학
+
+### Q7-2: 벡터 DB 임베딩은 언제 되나? ⭐⭐
+
+**Consultation (상담):**
+- **시점**: 등록 직후 (동기)
+- **데이터**: [요약] + [문의] + [조치]
+- **메타데이터**: branch_code, business_type, error_code, created_at
+- **검색 노출**: ✅ 즉시 (등록 후 바로 검색 가능)
+- **실패 시**: RetryQueueJob 등록 (백그라운드 재시도)
+
+```python
+# 흐름:
+1. RDB 저장 (consultations 테이블 INSERT)
+2. VectorStore 인덱싱 시도 (_index_consultation_vector)
+3. 실패 시 RetryQueueJob 등록
+4. 응답 (201 Created) - 임베딩 실패해도 RDB는 안전 ✅
+```
+
+**Manual (매뉴얼):**
+- **시점**: 승인 시 (DRAFT → APPROVED 상태 변경)
+- **데이터**: [키워드] + [주제] + [배경] + [가이드라인]
+- **메타데이터**: business_type, error_code, created_at
+- **검색 노출**: ✅ APPROVED만 (DRAFT는 벡터스토어에 저장 안 함)
+- **방식**: UPSERT (기존 벡터 자동 업데이트)
+
+```python
+# 흐름:
+1. manual.status = APPROVED로 변경
+2. ManualVersion 생성 (버전 관리)
+3. VectorStore 인덱싱 (_index_manual_vector)
+4. 응답 (200 OK) - 검색에 APPROVED만 노출
+```
+
+**핵심 설계:**
+- ✅ **RDB 우선**: 임베딩 실패해도 RDB에는 항상 데이터 저장됨 (원본 데이터 안전)
+- ✅ **VectorStore 보조**: 검색 인덱스로만 사용 (실패해도 데이터는 안전)
+- ✅ **메타데이터 필터링**: branch_code, business_type, error_code로 검색 최적화
+- ✅ **UPSERT 방식**: 매뉴얼 재인덱싱 시 기존 벡터 자동 업데이트
+
+**저장소 옵션:**
+```
+VECTORSTORE_TYPE=mock      # 메모리 저장 (개발용, 서버 재시작 시 손실)
+VECTORSTORE_TYPE=pgvector  # consultation_vectors, manual_vectors 테이블 (프로덕션)
+```
+
+**코드 참고:**
+- [consultation_service.py:54-78](app/services/consultation_service.py#L54) - create_consultation
+- [consultation_service.py:110-134](app/services/consultation_service.py#L110) - _index_consultation_vector
+- [manual_service.py:482-550](app/services/manual_service.py#L482) - approve_manual
+- [manual_service.py:1215-1238](app/services/manual_service.py#L1215) - _index_manual_vector
 
 ### Q8: 테스트는 어떻게 작성하나?
 
