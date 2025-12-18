@@ -31,15 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Startup:
         - Configure logging
         - Initialize database (dev only)
-        - Preload embedding service (E5 model)
+        - Schedule embedding service warmup as background task
 
     Shutdown:
         - Close database connections
 
     Unit Spec v1.1: LIFECYCLE INTEGRATION
-    - Embedding service loaded at startup with warmup
-    - Prevents first request from triggering slow model download
-    - Fast-fail semantics: raises error if model loading fails
+    - Embedding service loaded at startup with warmup (async background task)
+    - Allows server to start without waiting for slow model download
+    - Lazy initialization: first request waits if model not ready
     """
     # Startup
     logger.info("application_startup", environment=settings.environment)
@@ -50,19 +50,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("initializing_database_tables")
         # await init_db()  # Uncomment when models are ready
 
-    # Preload embedding service with model warmup (Unit Spec v1.1)
-    try:
-        logger.info(
-            "embedding_service_startup",
-            model=settings.e5_model_name,
-            device=settings.embedding_device,
-        )
-        embedding_service = get_embedding_service()
-        await embedding_service.warmup()
-        logger.info("embedding_service_ready", model=settings.e5_model_name)
-    except Exception as e:
-        logger.critical("embedding_service_startup_failed", error=str(e))
-        raise
+    # Schedule embedding service warmup as background task (non-blocking)
+    import asyncio
+    import time
+    async def warmup_embedding_service() -> None:
+        """Background task to preload embedding service with progress tracking."""
+        t0 = time.perf_counter()
+        try:
+            logger.info(
+                "embedding_service_background_warmup_start",
+                model=settings.e5_model_name,
+                device=settings.embedding_device,
+            )
+            embedding_service = get_embedding_service()
+            await embedding_service.warmup()
+
+            elapsed = time.perf_counter() - t0
+            logger.info(
+                "embedding_service_background_warmup_complete",
+                model=settings.e5_model_name,
+                elapsed_seconds=f"{elapsed:.2f}",
+            )
+
+        except Exception as e:
+            elapsed = time.perf_counter() - t0
+            logger.error(
+                "embedding_service_background_warmup_failed",
+                error=str(e),
+                elapsed_seconds=f"{elapsed:.2f}",
+            )
+            # Don't raise - allow server to start, lazy init will handle it
+
+    # Create background task but don't await it
+    asyncio.create_task(warmup_embedding_service())
 
     yield
 

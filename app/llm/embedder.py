@@ -89,6 +89,8 @@ class EmbeddingService:
         Raises:
             VectorIndexError: If model loading fails
         """
+        import time
+
         try:
             if self._initialized:
                 logger.debug("embedding_service_already_warmed")
@@ -98,28 +100,68 @@ class EmbeddingService:
                 if self._initialized:
                     return
 
-                logger.info("embedding_service_warming", model_name=self.model_name)
+                t0 = time.perf_counter()
+                logger.info(
+                    "embedding_service_warming_start",
+                    model_name=self.model_name,
+                    device=self.device,
+                )
 
                 # Load model in executor to avoid blocking (Item 1: get_running_loop)
+                t_model_start = time.perf_counter()
+                logger.info("embedding_service_loading_model", model_name=self.model_name)
+
                 loop = asyncio.get_running_loop()
-                self.model = await loop.run_in_executor(
-                    None,
-                    lambda: SentenceTransformer(self.model_name, device=self.device),
+                self.model = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: SentenceTransformer(self.model_name, device=self.device),
+                    ),
+                    timeout=300,  # 5 min timeout for model download
+                )
+
+                t_model_elapsed = time.perf_counter() - t_model_start
+                logger.info(
+                    "embedding_service_model_loaded",
+                    model_name=self.model_name,
+                    elapsed_seconds=f"{t_model_elapsed:.2f}",
                 )
 
                 # Initialize semaphore after event loop is running
                 self._semaphore = asyncio.Semaphore(self.max_concurrency)
 
-                # Warmup with a simple test embedding
-                _ = await self.embed_query("test")
+                # Warmup with a simple test embedding (use _encode_async to avoid re-initialization)
+                t_encode_start = time.perf_counter()
+                logger.info("embedding_service_first_encode_start")
+
+                _ = await self._encode_async("test")
+
+                t_encode_elapsed = time.perf_counter() - t_encode_start
+                logger.info(
+                    "embedding_service_first_encode_done",
+                    elapsed_seconds=f"{t_encode_elapsed:.2f}",
+                )
 
                 self._initialized = True
+                t_total_elapsed = time.perf_counter() - t0
                 logger.info(
                     "embedding_service_warmed",
                     model_name=self.model_name,
                     device=self.device,
+                    total_elapsed_seconds=f"{t_total_elapsed:.2f}",
+                    model_load_seconds=f"{t_model_elapsed:.2f}",
+                    first_encode_seconds=f"{t_encode_elapsed:.2f}",
                 )
 
+        except asyncio.TimeoutError as e:
+            logger.error(
+                "embedding_service_warmup_timeout",
+                model_name=self.model_name,
+                error=str(e),
+            )
+            raise VectorIndexError(
+                f"Timeout loading embedding model {self.model_name}: {e}"
+            )
         except Exception as e:
             logger.error(
                 "embedding_service_warmup_failed",
