@@ -32,6 +32,7 @@ from app.schemas.consultation import (
 from app.services.rerank import rerank_results
 from app.vectorstore.protocol import VectorStoreProtocol
 from app.vectorstore.schemas import VectorItem, VectorMetadata
+from app.core.config import settings
 
 logger = get_logger(__name__)
 

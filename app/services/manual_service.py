@@ -70,6 +70,7 @@ from app.services.validation import (
     validate_sentences_subset_of_source,
 )
 from app.services.comparison_service import ComparisonService
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
