@@ -214,6 +214,19 @@ class ConsultationService:
             metadata_filter=metadata_filter or None,
         )
 
+        # Apply similarity threshold filter
+        threshold = settings.search_similarity_threshold
+        filtered_results = [res for res in vector_results if res.score >= threshold]
+
+        if not filtered_results:
+            logger.info(
+                "search_no_results_above_threshold",
+                query=search_request.query,
+                threshold=threshold,
+                total_results=len(vector_results),
+            )
+            return []
+
         repo_filters = RepoSearchFilters(
             branch_code=search_request.filters.branch_code,
             business_type=search_request.filters.business_type,
@@ -222,13 +235,13 @@ class ConsultationService:
             end_date=search_request.filters.end_date,
         )
         consultations = await self.repository.search_by_ids(
-            [res.id for res in vector_results],
+            [res.id for res in filtered_results],
             repo_filters,
         )
         consultation_map = {item.id: item for item in consultations}
 
         base_results: list[dict] = []
-        for res in vector_results:
+        for res in filtered_results:
             consultation = consultation_map.get(res.id)
             if consultation is None:
                 continue  # 필터에 의해 제외된 케이스

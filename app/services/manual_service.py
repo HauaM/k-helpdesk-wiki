@@ -1286,11 +1286,24 @@ class ManualService:
             metadata_filter=metadata_filter or None,
         )
 
-        manuals = await self.manual_repo.find_by_ids([res.id for res in vector_results])
+        # Apply similarity threshold filter
+        threshold = settings.search_similarity_threshold
+        filtered_results = [res for res in vector_results if res.score >= threshold]
+
+        if not filtered_results:
+            logger.info(
+                "manual_search_no_results_above_threshold",
+                query=params.query,
+                threshold=threshold,
+                total_results=len(vector_results),
+            )
+            return []
+
+        manuals = await self.manual_repo.find_by_ids([res.id for res in filtered_results])
         manual_map = {m.id: m for m in manuals}
 
         base_results: list[dict[str, Any]] = []
-        for res in vector_results:
+        for res in filtered_results:
             manual = manual_map.get(res.id)
             if manual is None:
                 continue
