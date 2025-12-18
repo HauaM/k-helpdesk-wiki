@@ -42,12 +42,16 @@ AI/ML: LLM (OpenAI/Anthropic/Ollama), Embedding, Vector Search
 Integration: MCP (Model Context Protocol) - Claude와의 직접 연동
 ```
 
-#### 최근 추가된 기능 (2024년 12월)
+#### 최근 추가된 기능 (2025년 12월)
 - ✨ **FR-15**: 공통코드 관리 시스템 완성 (BUSINESS_TYPE, ERROR_CODE 등)
 - 🦙 **Ollama LLM 지원**: 로컬 LLM 모델 지원 (OpenAI/Anthropic 대안)
 - 📊 **Manual Diff API**: 매뉴얼 버전 간 비교 및 변경사항 분석
 - 🔗 **향상된 리뷰 태스크**: 기존 매뉴얼 정보와 함께 비교 데이터 제공
 - ⭐ **v2.1 스마트 비교**: ComparisonService 기반 3-path 로직 (SIMILAR/SUPPLEMENT/NEW)
+- 🎯 **E5 로컬 임베딩** (2025-12-18): 한국어 최적화 E5 모델 (multilingual-e5-small-ko-v2, 384차원)
+  - Bag-of-words → Semantic embeddings 전환
+  - Async-safe with concurrency control (Semaphore)
+  - 시작 시 모델 warmup으로 첫 요청 지연 방지
 
 ---
 
