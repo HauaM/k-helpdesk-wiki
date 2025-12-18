@@ -133,7 +133,7 @@ def _build_embedding_text(self, consultation: Consultation) -> str:
 -- pgvector 자동 관리 테이블
 CREATE TABLE consultation_vectors (
     id UUID PRIMARY KEY,
-    embedding vector(1536),  -- OpenAI embedding dimension
+    embedding vector(384),  -- dragonkue/multilingual-e5-small-ko-v2
     metadata JSONB,
     branch_code TEXT,
     business_type TEXT,
@@ -187,7 +187,7 @@ def _build_manual_text(self, manual: ManualEntry) -> str:
 ```sql
 CREATE TABLE manual_vectors (
     id UUID PRIMARY KEY,
-    embedding vector(1536),
+    embedding vector(384),
     metadata JSONB,
     business_type TEXT,
     error_code TEXT,
@@ -210,7 +210,7 @@ LLM Client (app/llm/)
   ├─ PROVIDER=anthropic → Claude embeddings API 호출
   └─ PROVIDER=ollama → 로컬 Ollama 모델 호출
   ↓
-벡터 (1536차원 float array)
+벡터 (384차원 float array)
   ↓
 VectorStore.index_document()
   └─ pgvector: INSERT/UPDATE 쿼리 실행
@@ -222,7 +222,7 @@ VectorStore.index_document()
 # .env.example
 VECTORSTORE_TYPE=mock          # 메모리 벡터스토어
 LLM_PROVIDER=mock              # 고정 임베딩 반환
-VECTORSTORE_DIMENSION=1536     # OpenAI 차원
+VECTORSTORE_DIMENSION=384     # dragonkue/multilingual-e5-small-ko-v2
 ```
 
 ---
@@ -443,7 +443,7 @@ Manual 승인 중 임베딩 실패
 VECTORSTORE_TYPE=pgvector          # 또는 mock, pinecone, qdrant
 LLM_PROVIDER=openai                # 또는 anthropic, ollama, mock
 LLM_MODEL=gpt-4-turbo-preview
-VECTORSTORE_DIMENSION=1536         # OpenAI 기본값
+VECTORSTORE_DIMENSION=384         # OpenAI 기본값
 OPENAI_API_KEY=sk-...              # 필요 시
 
 # 개발 환경 (기본값, 외부 서비스 불필요)

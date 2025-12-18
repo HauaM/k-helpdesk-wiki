@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
@@ -23,7 +24,6 @@ from app.core.exceptions import (
     VectorIndexError,
     VectorSearchError,
 )
-from app.api.response_utils import build_meta
 from app.api.response_utils import build_meta
 from app.schemas.response import ResponseError, ResponseEnvelope
 
@@ -49,6 +49,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """Register handlers that wrap exceptions in the common envelope."""
 
     app.add_exception_handler(KHWException, _khw_exception_handler)
+    app.add_exception_handler(RequestValidationError, _request_validation_error_handler)
     app.add_exception_handler(HTTPException, _http_exception_handler)
     app.add_exception_handler(Exception, _unhandled_exception_handler)
 
@@ -77,6 +78,20 @@ def _compress_detail(detail: Any) -> tuple[str, Any | None]:
     return str(detail), None
 
 
+def _format_validation_message(errors: list[dict[str, Any]]) -> str:
+    if not errors:
+        return "Validation error"
+
+    parts: list[str] = []
+    for error in errors:
+        loc = error.get("loc", [])
+        msg = error.get("msg", "Validation error")
+        loc_path = ".".join(str(item) for item in loc) if loc else None
+        parts.append(f"{loc_path}: {msg}" if loc_path else msg)
+
+    return "; ".join(parts)
+
+
 async def _khw_exception_handler(request: Request, exc: KHWException) -> JSONResponse:
     status_code, error_code = EXCEPTION_RESPONSE_MAP.get(
         type(exc), (status.HTTP_500_INTERNAL_SERVER_ERROR, DEFAULT_ERROR_CODE)
@@ -102,6 +117,32 @@ async def _khw_exception_handler(request: Request, exc: KHWException) -> JSONRes
     )
     return JSONResponse(
         status_code=status_code,
+        content=jsonable_encoder(envelope, by_alias=True),
+    )
+
+
+async def _request_validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    meta = build_meta(request)
+    errors = exc.errors() or []
+    message = _format_validation_message(errors)
+
+    envelope = ResponseEnvelope[None](
+        success=False,
+        data=None,
+        error=_serialize_error(
+            exc=exc,
+            code="ValidationError",
+            message=message,
+            details={"errors": errors},
+            hint=None,
+        ),
+        meta=meta,
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=jsonable_encoder(envelope, by_alias=True),
     )
 
