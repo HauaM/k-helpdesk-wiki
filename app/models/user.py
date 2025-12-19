@@ -3,11 +3,15 @@ User domain model
 """
 
 import enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum as SQLEnum, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.department import Department, UserDepartment
 
 
 class UserRole(str, enum.Enum):
@@ -32,7 +36,6 @@ class User(Base, TimestampMixin):
     )
     employee_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    department: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         SQLEnum(UserRole, name="user_role"),
         nullable=False,
@@ -45,6 +48,17 @@ class User(Base, TimestampMixin):
         default=True,
         server_default="true",
     )
+    department_links: Mapped[list["UserDepartment"]] = relationship(
+        "UserDepartment",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, username={self.username}, role={self.role})>"
+
+    @property
+    def departments(self) -> list["Department"]:
+        """사용자가 속한 부서 리스트"""
+
+        return [link.department for link in self.department_links]

@@ -11,7 +11,6 @@ def _build_user(role: UserRole) -> User:
         username="tester",
         employee_id="emp-001",
         name="테스터",
-        department="TEST",
         role=role,
         password_hash="pbkdf2:sha256:...",
     )

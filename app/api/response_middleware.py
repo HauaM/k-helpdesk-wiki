@@ -24,6 +24,7 @@ class SuccessEnvelopeMiddleware(BaseHTTPMiddleware):
         "/docs/oauth2-redirect",
         "/redoc",
         "/redoc/",
+        "/api/v1/auth/login",
     }
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
