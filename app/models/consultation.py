@@ -5,10 +5,11 @@ ERD 요약:
 - Consultation 1 - 1 ConsultationVectorIndex
 """
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.sqlalchemy_types import JSONB
@@ -46,6 +47,19 @@ class Consultation(BaseModel):
         nullable=False,
         default=dict,
         server_default="{}",
+    )
+
+    is_manual_generated: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        comment="상담 기반 메뉴얼 초안 생성 완료 여부",
+    )
+    manual_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="최종 메뉴얼 초안 생성 완료 시각",
     )
 
     manual_entry_id: Mapped[UUID | None] = mapped_column(

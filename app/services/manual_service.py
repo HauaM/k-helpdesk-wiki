@@ -34,6 +34,7 @@ from app.llm.prompts.manual_diff import (
     build_manual_diff_summary_prompt,
     SYSTEM_PROMPT as DIFF_SYSTEM_PROMPT,
 )
+from app.models.consultation import Consultation
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
 from app.models.task import ManualReviewTask, TaskStatus, ComparisonType
 from app.repositories.consultation_repository import ConsultationRepository
@@ -218,6 +219,7 @@ class ManualService:
         }
 
         # Step 6: comparison_type에 따른 분기 처리
+        response: ManualDraftCreateResponse
         if comparison_result.comparison_type == ComparisonType.SIMILAR:
             # SIMILAR 경로: 기존 메뉴얼 반환, draft는 ARCHIVED로 표시
             manual_entry.status = ManualStatus.ARCHIVED
@@ -230,7 +232,7 @@ class ManualService:
                 comparison_result.existing_manual, business_type_map
             )
 
-            return ManualDraftCreateResponse(
+            response = ManualDraftCreateResponse(
                 comparison_type=ComparisonType.SIMILAR,
                 id=manual_entry.id,
                 created_at=manual_entry.created_at,
@@ -265,7 +267,7 @@ class ManualService:
                 comparison_result.existing_manual, business_type_map
             )
 
-            return ManualDraftCreateResponse(
+            response = ManualDraftCreateResponse(
                 comparison_type=ComparisonType.SUPPLEMENT,
                 id=manual_entry.id,
                 created_at=manual_entry.created_at,
@@ -297,7 +299,7 @@ class ManualService:
                 manual_entry, business_type_map
             )
 
-            return ManualDraftCreateResponse(
+            response = ManualDraftCreateResponse(
                 comparison_type=ComparisonType.NEW,
                 id=manual_entry.id,
                 created_at=manual_entry.created_at,
@@ -309,6 +311,16 @@ class ManualService:
                 comparison_version=comparison_result.compare_version,
                 message="신규 메뉴얼 초안으로 생성되었습니다.",
             )
+
+        await self._mark_consultation_manual_generated(consultation)
+        return response
+
+    async def _mark_consultation_manual_generated(self, consultation: Consultation) -> None:
+        """정상 종료 시 상담에 플래그와 타임스탬프를 기록."""
+
+        consultation.is_manual_generated = True
+        consultation.manual_generated_at = datetime.now(timezone.utc)
+        await self.session.flush()
 
     async def get_manual(self, manual_id: UUID) -> ManualEntryResponse:
         """메뉴얼 단건 상세 조회."""

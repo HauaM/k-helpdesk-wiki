@@ -79,6 +79,8 @@ class ConsultationResponse(ConsultationBase, BaseResponseSchema):
 
     user_name: str | None = None
     manual_entry_id: UUID | None = None
+    is_manual_generated: bool = Field(default=False)
+    manual_generated_at: datetime | None = Field(default=None)
 
 
 class ConsultationSearchParams(BaseSchema):
