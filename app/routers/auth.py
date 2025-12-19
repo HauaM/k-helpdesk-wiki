@@ -1,6 +1,6 @@
 """Authentication routes"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -42,7 +42,7 @@ async def signup(
     summary="사용자 로그인",
 )
 async def login(
-    payload: UserLogin,
+    request: Request,
     service: UserService = Depends(get_user_service),
 ) -> TokenResponse:
     """
@@ -50,7 +50,8 @@ async def login(
     """
 
     try:
-        return await service.login(payload)
+        user_login = await _resolve_login_payload(request)
+        return await service.login(user_login)
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -70,3 +71,34 @@ async def read_me(
     """토큰으로 인증된 현재 사용자 정보를 반환."""
 
     return UserResponse.model_validate(current_user)
+
+
+FORM_CONTENT_TYPES = (
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+)
+
+
+async def _resolve_login_payload(request: Request) -> UserLogin:
+    """
+    폼 또는 JSON으로부터 UserLogin 값을 해결.
+    """
+
+    content_type = request.headers.get("content-type", "")
+    content_type_lower = content_type.lower()
+    if not any(form_type in content_type_lower for form_type in FORM_CONTENT_TYPES):
+        try:
+            json_data = await request.json()
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="로그인에는 OAuth2 폼 또는 JSON 본문이 필요합니다.",
+            )
+
+        return UserLogin.model_validate(json_data)
+
+    form_data = await request.form()
+    return UserLogin(
+        username=form_data.get("username"),
+        password=form_data.get("password"),
+    )
