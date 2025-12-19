@@ -47,6 +47,13 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_employee_id(self, employee_id: str) -> User | None:
+        """employee_id로 사용자 단건 조회."""
+
+        stmt = select(User).where(User.employee_id == employee_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_username(self, username: str) -> User | None:
         """username으로 사용자 단건 조회."""
 

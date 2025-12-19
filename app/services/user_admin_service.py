@@ -129,7 +129,11 @@ class UserAdminService:
             user = await self.user_repo.get_with_departments(user.id)
             if user is None:
                 raise RecordNotFoundError(f"user_id={user.id}에 해당하는 사용자가 없습니다.")
-
+        else:
+            refreshed = await self.user_repo.get_with_departments(user.id)
+            if refreshed is None:
+                raise RecordNotFoundError(f"user_id={user.id}에 해당하는 사용자가 없습니다.")
+            user = refreshed
         return UserResponse.model_validate(user)
 
     async def _enforce_password_policy(self, password: str) -> None:
