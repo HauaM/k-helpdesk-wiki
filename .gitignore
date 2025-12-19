@@ -30,6 +30,7 @@ ENV/
 poetry.lock
 # uv.lock should be committed (uncomment if you want to ignore it)
 # uv.lock
+.uv_cache/
 
 # Environment
 .env

@@ -47,7 +47,7 @@ class FakeManualRepository:
     async def find_by_ids(self, ids: list[UUID]) -> list[ManualEntry]:
         return [m for m in self._store.values() if m.id in ids]
 
-    async def list_entries(self, statuses=None, limit=100):
+    async def list_entries(self, statuses=None, limit=100, employee_id=None):
         entries = list(self._store.values())
         if statuses:
             entries = [e for e in entries if e.status in statuses]

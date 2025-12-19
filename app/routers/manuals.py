@@ -15,7 +15,8 @@ from app.core.exceptions import (
     BusinessLogicError,
     NeedsReReviewError,
 )
-from app.models.manual import ManualStatus
+from app.models.manual import ManualEntry, ManualStatus
+from app.models.user import User, UserRole
 from app.schemas.manual import (
     ManualApproveRequest,
     ManualDraftCreateFromConsultationRequest,
@@ -35,8 +36,29 @@ from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.llm.factory import get_llm_client_instance
 from app.vectorstore.factory import get_manual_vectorstore
 from app.api.swagger_responses import combined_responses
+from app.repositories.manual_rdb import ManualEntryRDBRepository
+from app.core.dependencies import get_current_user, require_roles
 
-router = APIRouter(prefix="/manuals", tags=["manuals"])
+router = APIRouter(
+    prefix="/manuals",
+    tags=["manuals"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+def _ensure_draft_view_allowed(manual: ManualEntry, current_user: User) -> None:
+    if manual.status != ManualStatus.DRAFT:
+        return
+
+    if current_user.role == UserRole.ADMIN:
+        return
+
+    consultation = manual.source_consultation
+    if consultation is None or consultation.employee_id != current_user.employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="초안 메뉴얼은 작성자 또는 관리자만 조회할 수 있습니다.",
+        )
 
 
 def get_manual_service(
@@ -210,6 +232,9 @@ async def approve_manual(
     manual_id: UUID,
     payload: ManualApproveRequest,
     service: ManualService = Depends(get_manual_service),
+    current_user: User = Depends(
+        require_roles(UserRole.REVIEWER, UserRole.ADMIN),
+    ),
 ) -> ManualVersionInfo:
     """
     메뉴얼 초안 승인 및 버전 관리
@@ -267,8 +292,12 @@ async def approve_manual(
     - 거절 시 이유 기입 필수
     """
 
+    sanitized_payload = payload.model_copy(
+        update={"approver_id": current_user.employee_id}
+    )
+
     try:
-        return await service.approve_manual(manual_id, payload)
+        return await service.approve_manual(manual_id, sanitized_payload)
     except NeedsReReviewError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -607,6 +636,7 @@ async def diff_draft_with_active(
     draft_id: UUID,
     summarize: bool = False,
     service: ManualService = Depends(get_manual_service),
+    current_user: User = Depends(get_current_user),
 ) -> ManualVersionDiffResponse:
     """
     초안 vs 운영 버전 비교
@@ -649,6 +679,16 @@ async def diff_draft_with_active(
     - 400 Bad Request: 초안이 DRAFT 상태가 아님
     """
 
+    repo = ManualEntryRDBRepository(service.session)
+    manual_entry = await repo.get_by_id(draft_id)
+    if manual_entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ManualEntry(id={draft_id}) not found",
+        )
+
+    _ensure_draft_view_allowed(manual_entry, current_user)
+
     try:
         return await service.diff_draft_with_active(
             draft_id,
@@ -674,6 +714,7 @@ async def list_manuals(
     status_filter: ManualStatus | None = None,
     limit: int = 100,
     service: ManualService = Depends(get_manual_service),
+    current_user: User = Depends(get_current_user),
 ) -> list[ManualEntryResponse]:
     """
     메뉴얼 목록 조회
@@ -714,9 +755,14 @@ async def list_manuals(
 
     TODO: 페이지네이션 추가 예정
     """
+    employee_filter = None
+    if status_filter == ManualStatus.DRAFT and current_user.role != UserRole.ADMIN:
+        employee_filter = current_user.employee_id
+
     return await service.list_manuals(
         status=status_filter,
         limit=limit,
+        employee_id=employee_filter,
     )
 
 
@@ -953,6 +999,7 @@ async def get_approved_group_manuals(
 async def get_manual_detail(
     manual_id: UUID,
     service: ManualService = Depends(get_manual_service),
+    current_user: User = Depends(get_current_user),
 ) -> ManualEntryResponse:
     """
     메뉴얼 상세 조회
@@ -985,6 +1032,16 @@ async def get_manual_detail(
     **에러 응답:**
     - 404 Not Found: 메뉴얼을 찾을 수 없음
     """
+
+    repo = ManualEntryRDBRepository(service.session)
+    manual_entry = await repo.get_by_id(manual_id)
+    if manual_entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ManualEntry(id={manual_id}) not found",
+        )
+
+    _ensure_draft_view_allowed(manual_entry, current_user)
 
     try:
         return await service.get_manual(manual_id)

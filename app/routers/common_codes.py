@@ -32,7 +32,14 @@ from app.schemas.common_code import (
     BulkCommonCodeResponse,
 )
 
-router = APIRouter(tags=["common-codes"])
+from app.core.dependencies import get_current_user, require_roles
+from app.models.user import User, UserRole
+
+
+router = APIRouter(
+    tags=["common-codes"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def get_common_code_service(
@@ -57,6 +64,7 @@ def get_common_code_service(
 async def create_group(
     payload: CommonCodeGroupCreate,
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> CommonCodeGroupResponse:
     """
     새로운 공통코드 그룹 생성
@@ -89,6 +97,7 @@ async def list_groups(
     page_size: int = Query(20, ge=1, le=100, description="페이지 크기"),
     is_active: Optional[bool] = Query(None, description="활성화 필터"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 그룹 목록 조회 (페이징)
@@ -107,6 +116,7 @@ async def search_groups(
     page: int = Query(1, ge=1, description="페이지 번호"),
     page_size: int = Query(20, ge=1, le=100, description="페이지 크기"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     그룹 코드 또는 그룹 이름으로 검색
@@ -123,6 +133,7 @@ async def search_groups(
 async def get_group(
     group_id: UUID = Path(..., description="그룹 ID"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     ID로 그룹과 하위 항목을 함께 조회
@@ -148,6 +159,7 @@ async def update_group(
     group_id: UUID = Path(..., description="그룹 ID"),
     payload: CommonCodeGroupUpdate = ...,
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 그룹 수정 (부분 업데이트 지원)
@@ -169,6 +181,7 @@ async def update_group(
 async def delete_group(
     group_id: UUID = Path(..., description="그룹 ID"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 그룹 삭제 (하위 항목도 함께 삭제)
@@ -194,6 +207,7 @@ async def create_item(
     group_id: UUID = Path(..., description="그룹 ID"),
     payload: CommonCodeItemCreate = ...,
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 항목 생성
@@ -218,6 +232,7 @@ async def list_items(
     page_size: int = Query(100, ge=1, le=1000, description="페이지 크기"),
     is_active_only: bool = Query(False, description="활성 항목만 조회"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     그룹의 공통코드 항목 목록 조회
@@ -242,6 +257,7 @@ async def list_items(
 async def get_item(
     item_id: UUID = Path(..., description="항목 ID"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     ID로 공통코드 항목 조회
@@ -262,6 +278,7 @@ async def update_item(
     item_id: UUID = Path(..., description="항목 ID"),
     payload: CommonCodeItemUpdate = ...,
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 항목 수정 (부분 업데이트 지원)
@@ -283,6 +300,7 @@ async def update_item(
 async def delete_item(
     item_id: UUID = Path(..., description="항목 ID"),
     service: CommonCodeService = Depends(get_common_code_service),
+    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 항목 삭제

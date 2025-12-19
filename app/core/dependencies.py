@@ -2,6 +2,8 @@
 Common FastAPI dependencies
 """
 
+from typing import Callable
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AuthenticationError, JWTDecodeError
 from app.core.jwt import decode_access_token
 from app.core.db import get_session
+from app.models.user import User, UserRole
 from app.repositories.user_repository import UserRepository
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 async def get_current_user(
@@ -65,3 +68,23 @@ async def get_current_user(
         )
 
     return user
+
+
+def require_roles(
+    *allowed_roles: UserRole,
+) -> Callable[[User], User]:
+    """
+    Dependency to ensure the current user has one of the allowed roles.
+    """
+
+    async def _require_roles(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="작업 권한이 없습니다.",
+            )
+        return current_user
+
+    return _require_roles

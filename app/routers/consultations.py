@@ -22,11 +22,16 @@ from app.services.consultation_service import ConsultationService
 from app.vectorstore.factory import get_consultation_vectorstore
 from app.queue.inmemory import InMemoryRetryQueue
 from app.api.swagger_responses import combined_responses
+from app.core.dependencies import get_current_user
 
 
 _retry_queue = InMemoryRetryQueue()
 
-router = APIRouter(prefix="/consultations", tags=["consultations"])
+router = APIRouter(
+    prefix="/consultations",
+    tags=["consultations"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def get_consultation_service(

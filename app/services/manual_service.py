@@ -610,6 +610,7 @@ class ManualService:
         *,
         status: ManualStatus | None = None,
         limit: int = 100,
+        employee_id: str | None = None,
     ) -> list[ManualEntryResponse]:
         """RFP FR-8/General: 메뉴얼 목록 조회"""
 
@@ -617,6 +618,7 @@ class ManualService:
         entries = await self.manual_repo.list_entries(
             statuses=statuses,
             limit=limit,
+            employee_id=employee_id,
         )
         
         # business_type 공통코드 매핑 조회 (한 번만)

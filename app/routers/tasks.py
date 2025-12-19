@@ -20,8 +20,14 @@ from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.vectorstore.factory import get_manual_vectorstore
 from app.llm.factory import get_llm_client_instance
 from app.api.swagger_responses import combined_responses
+from app.core.dependencies import get_current_user, require_roles
+from app.models.user import User, UserRole
 
-router = APIRouter(prefix="/manual-review", tags=["tasks"])
+router = APIRouter(
+    prefix="/manual-review",
+    tags=["tasks"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def get_task_service(
@@ -61,6 +67,9 @@ async def list_review_tasks(
     status: str | None = None,
     limit: int = 100,
     service: TaskService = Depends(get_task_service),
+    _current_user: User = Depends(
+        require_roles(UserRole.REVIEWER, UserRole.ADMIN),
+    ),
 ) -> list[ManualReviewTaskResponse]:
     """
     메뉴얼 검토 태스크 목록 조회
@@ -143,6 +152,9 @@ async def approve_review_task(
     task_id: UUID,
     data: ManualReviewApproval,
     service: TaskService = Depends(get_task_service),
+    current_user: User = Depends(
+        require_roles(UserRole.REVIEWER, UserRole.ADMIN),
+    ),
 ) -> ManualReviewTaskResponse:
     """
     메뉴얼 검토 태스크 승인
@@ -196,7 +208,10 @@ async def approve_review_task(
     - 400 Bad Request: 태스크가 검토 중(IN_PROGRESS) 상태가 아님
     - 409 Conflict: 재검토 필요 (비즈니스 로직 오류)
     """
-    return await service.approve_task(task_id, data)
+    sanitized_payload = data.model_copy(
+        update={"employee_id": current_user.employee_id}
+    )
+    return await service.approve_task(task_id, sanitized_payload)
 
 
 @router.post(
@@ -217,6 +232,9 @@ async def reject_review_task(
     task_id: UUID,
     data: ManualReviewRejection,
     service: TaskService = Depends(get_task_service),
+    _current_user: User = Depends(
+        require_roles(UserRole.REVIEWER, UserRole.ADMIN),
+    ),
 ) -> ManualReviewTaskResponse:
     """
     메뉴얼 검토 태스크 거절
@@ -293,6 +311,9 @@ async def reject_review_task(
 async def start_review_task(
     task_id: UUID,
     service: TaskService = Depends(get_task_service),
+    _current_user: User = Depends(
+        require_roles(UserRole.REVIEWER, UserRole.ADMIN),
+    ),
 ) -> ManualReviewTaskResponse:
     """
     메뉴얼 검토 태스크 시작

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
+from app.models.consultation import Consultation
 from app.models.task import ManualReviewTask, TaskStatus
 from app.repositories.base import BaseRepository
 
@@ -71,6 +72,7 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
         *,
         statuses: set[ManualStatus] | None = None,
         limit: int = 100,
+        employee_id: str | None = None,
     ) -> Sequence[ManualEntry]:
         """
         List manual entries with optional status filter.
@@ -83,6 +85,11 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
             Ordered list of manual entries
         """
         stmt = select(ManualEntry)
+        if employee_id:
+            stmt = (
+                stmt.join(ManualEntry.source_consultation)
+                .where(Consultation.employee_id == employee_id)
+            )
         if statuses:
             stmt = stmt.where(ManualEntry.status.in_(list(statuses)))
         stmt = stmt.order_by(ManualEntry.created_at.desc()).limit(limit)
