@@ -16,7 +16,15 @@ from app.core.db import close_db
 from app.llm.embedder import get_embedding_service
 
 # Import routers
-from app.routers import auth, consultations, manuals, tasks, common_codes
+from app.routers import (
+    auth,
+    common_codes,
+    consultations,
+    departments,
+    manuals,
+    tasks,
+    users,
+)
 from app.api.error_handlers import register_exception_handlers
 from app.api.response_middleware import SuccessEnvelopeMiddleware
 
@@ -142,6 +150,14 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         common_codes.router,
+        prefix=settings.api_v1_prefix,
+    )
+    app.include_router(
+        departments.router,
+        prefix=settings.api_v1_prefix,
+    )
+    app.include_router(
+        users.router,
         prefix=settings.api_v1_prefix,
     )
 
