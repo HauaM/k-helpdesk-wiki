@@ -15,7 +15,6 @@ from app.schemas.department import DepartmentResponse
 
 
 class UserBase(BaseSchema):
-    username: str = Field(min_length=3, max_length=50)
     employee_id: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=100)
     role: UserRole = Field(default=UserRole.CONSULTANT)
@@ -35,7 +34,7 @@ class UserCreate(UserBase):
 
 
 class UserLogin(BaseSchema):
-    username: str = Field(min_length=1, max_length=50)
+    employee_id: str = Field(min_length=1, max_length=50)
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -47,7 +46,6 @@ class UserResponse(UserBase):
 
 
 class UserSortBy(str, Enum):
-    username = "username"
     employee_id = "employee_id"
     name = "name"
     created_at = "created_at"
@@ -71,7 +69,6 @@ class UserListParams(BaseSchema):
 
 
 class UserAdminCreate(BaseSchema):
-    username: str = Field(min_length=3, max_length=50)
     employee_id: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=100)
     role: UserRole = Field(default=UserRole.CONSULTANT)

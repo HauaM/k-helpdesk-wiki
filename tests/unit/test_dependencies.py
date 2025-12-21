@@ -8,7 +8,6 @@ from app.models.user import User, UserRole
 def _build_user(role: UserRole) -> User:
     return User(
         id=1,
-        username="tester",
         employee_id="emp-001",
         name="테스터",
         role=role,

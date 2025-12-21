@@ -64,10 +64,6 @@ class UserAdminService:
     async def create_user(self, payload: UserAdminCreate) -> UserResponse:
         await self._enforce_password_policy(payload.password)
 
-        existing_by_username = await self.user_repo.get_by_username(payload.username)
-        if existing_by_username:
-            raise DuplicateRecordError(f"username={payload.username}은(는) 이미 사용 중입니다.")
-
         existing_by_employee = await self.user_repo.get_by_employee_id(payload.employee_id)
         if existing_by_employee:
             raise DuplicateRecordError(
@@ -75,7 +71,6 @@ class UserAdminService:
             )
 
         user_create = UserCreate(
-            username=payload.username,
             employee_id=payload.employee_id,
             name=payload.name,
             role=payload.role,

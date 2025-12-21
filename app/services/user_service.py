@@ -41,9 +41,9 @@ class UserService:
     async def signup(self, user_create: UserCreate) -> UserResponse:
         """회원가입 수행."""
 
-        existing = await self.repository.get_by_username(user_create.username)
+        existing = await self.repository.get_by_employee_id(user_create.employee_id)
         if existing is not None:
-            raise DuplicateRecordError("Username already exists")
+            raise DuplicateRecordError("Employee ID already exists")
 
         password_hash = hash_password(user_create.password)
         user = await self.repository.create_user(user_create, password_hash=password_hash)
@@ -66,7 +66,7 @@ class UserService:
     async def login(self, user_login: UserLogin) -> TokenResponse:
         """로그인 및 액세스 토큰 발급."""
 
-        user = await self.repository.get_by_username(user_login.username)
+        user = await self.repository.get_by_employee_id(user_login.employee_id)
         if user is None:
             raise AuthenticationError("Invalid credentials")
 
@@ -75,7 +75,7 @@ class UserService:
 
         payload = {
             "sub": str(user.id),
-            "username": user.username,
+            "employee_id": user.employee_id,
             "role": user.role.value,
         }
         token = create_access_token(payload)

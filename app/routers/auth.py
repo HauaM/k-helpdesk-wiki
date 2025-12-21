@@ -99,6 +99,6 @@ async def _resolve_login_payload(request: Request) -> UserLogin:
 
     form_data = await request.form()
     return UserLogin(
-        username=form_data.get("username"),
+        employee_id=form_data.get("employee_id"),
         password=form_data.get("password"),
     )

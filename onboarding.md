@@ -274,7 +274,7 @@ class ConsultationService:
 │ User (사용자)                                          │
 ├────────────────────────────────────────────────────────┤
 │ id (PK, Integer)    ← 자동증가 (UUID 아님)            │
-│ username, password_hash                               │
+│ password_hash                                         │
 │ employee_id, name, department                         │
 │ role (CONSULTANT/REVIEWER/ADMIN)                      │
 │ is_active                                             │

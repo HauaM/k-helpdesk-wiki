@@ -14,7 +14,6 @@ from app.schemas.user import UserCreate
 
 
 SORTABLE_COLUMNS = {
-    "username": User.username,
     "employee_id": User.employee_id,
     "name": User.name,
     "created_at": User.created_at,
@@ -67,18 +66,10 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_username(self, username: str) -> User | None:
-        """username으로 사용자 단건 조회."""
-
-        stmt = select(User).where(User.username == username)
-        result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
-
     async def create_user(self, data: UserCreate, *, password_hash: str) -> User:
         """회원가입 데이터를 받아 신규 사용자 생성."""
 
         user = User(
-            username=data.username,
             employee_id=data.employee_id,
             name=data.name,
             role=data.role,

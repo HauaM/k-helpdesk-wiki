@@ -5,7 +5,7 @@
 - **목적:** Swagger “Authorize”에서 사용하는 OAuth2 Password Grant 폼 데이터로 `/auth/login`이 정상 동작하도록 한다.
 - **유형:** 변경
 - **핵심 요구사항:**
-  - **입력:** OAuth2 password grant 폼(`grant_type`, `username`, `password`) 또는 JSON `UserLogin`
+  - **입력:** OAuth2 password grant 폼(`grant_type`, `employee_id`, `password`) 또는 JSON `UserLogin`
   - **출력:** `TokenResponse`
   - **예외/제약:** 인증 실패 시 기존 `401 Unauthorized` 및 `WWW-Authenticate` 헤더 유지
   - **처리흐름 요약:** `OAuth2PasswordRequestForm`으로 오는 값으로 `UserLogin`을 만들고 서비스 호출 후 토큰 반환
@@ -41,7 +41,7 @@ flowchart TD
 
 | TC ID | 계층 | 시나리오 | 목적 | 입력/사전조건 | 기대결과 |
 | --- | --- | --- | --- | --- | --- |
-| TC-API-001 | API | Swagger OAuth2 폼 입력 | OAuth2PasswordRequestForm을 처리하는 핸들러 검증 | `grant_type=password&username=foo&password=bar` | `200`, 토큰 포함 JSON |
+| TC-API-001 | API | Swagger OAuth2 폼 입력 | OAuth2PasswordRequestForm을 처리하는 핸들러 검증 | `grant_type=password&employee_id=foo&password=bar` | `200`, 토큰 포함 JSON |
 | TC-SVC-002 | Unit | UserService.login 호출 | JWT 생성 로직 유지 | 정상 유저/비밀번호 (mock DB) | `TokenResponse` 반환 |
 
 ## 5. 사용자 요청 기록

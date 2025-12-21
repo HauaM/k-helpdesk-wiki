@@ -44,7 +44,7 @@ def test_login_via_oauth2_form(auth_client: tuple[TestClient, DummyLoginService]
         "/api/v1/auth/login",
         data={
             "grant_type": "password",
-            "username": "form-user",
+            "employee_id": "emp-form",
             "password": "secret",
         },
     )
@@ -53,7 +53,7 @@ def test_login_via_oauth2_form(auth_client: tuple[TestClient, DummyLoginService]
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["access_token"] == "stub-access-token"
-    assert service.calls[-1].username == "form-user"
+    assert service.calls[-1].employee_id == "emp-form"
 
 
 def test_login_via_json_body(auth_client: tuple[TestClient, DummyLoginService]) -> None:
@@ -62,7 +62,7 @@ def test_login_via_json_body(auth_client: tuple[TestClient, DummyLoginService]) 
     response = client.post(
         "/api/v1/auth/login",
         json={
-            "username": "json-user",
+            "employee_id": "emp-json",
             "password": "json-secret",
         },
     )
@@ -71,4 +71,4 @@ def test_login_via_json_body(auth_client: tuple[TestClient, DummyLoginService]) 
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["access_token"] == "stub-access-token"
-    assert service.calls[-1].username == "json-user"
+    assert service.calls[-1].employee_id == "emp-json"
