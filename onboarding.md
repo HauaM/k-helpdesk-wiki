@@ -800,6 +800,9 @@ uv run black app/ tests/ && uv run ruff check app/ tests/ --fix && uv run mypy a
 # 새 마이그레이션 생성
 uv run alembic revision --autogenerate -m "Description"
 
+# 특전 버전 업그레이드 
+uv run alembic upgrade 20251219_0002
+
 # 마이그레이션 적용
 uv run alembic upgrade head
 
