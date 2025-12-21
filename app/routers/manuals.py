@@ -5,7 +5,7 @@ RFP Reference: Section 10 - API Design
 """
 
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -36,9 +36,11 @@ from app.services.manual_service import ManualService
 from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.llm.factory import get_llm_client_instance
 from app.vectorstore.factory import get_manual_vectorstore
+from app.api.response_utils import build_meta
 from app.api.swagger_responses import combined_responses
 from app.repositories.manual_rdb import ManualEntryRDBRepository
 from app.core.dependencies import get_current_user, require_roles
+from app.schemas.response import ResponseEnvelope
 
 router = APIRouter(
     prefix="/manuals",
@@ -769,18 +771,38 @@ async def list_manuals(
 
 @router.get(
     "/search",
-    response_model=list[ManualSearchResult],
+    response_model=ResponseEnvelope[list[ManualSearchResult]],
     summary="Search manuals by similarity",
     responses=combined_responses(
         status_code=200,
-        data_example=[{"id": "uuid-1", "topic": "로그인 실패", "similarity_score": 0.92}],
+        data_example=[
+            {
+                "manual": {
+                    "id": "de9d2d35-c4ea-4a7d-b66c-55e79471cb83",
+                    "created_at": "2025-12-19T00:54:56.876912Z",
+                    "updated_at": "2025-12-19T07:17:46.249852Z",
+                    "keywords": ["카드", "한도 초과", "거래"],
+                    "topic": "카드 결제 승인 시 한도 초과 메시지 발생",
+                    "background": "고객 카드 한도 확인 후 일시적으로 한도 상향 안내 및 승인 재요청",
+                    "guideline": "승인 재요청 후 정상 처리",
+                    "business_type": "TEST",
+                    "error_code": "TEST",
+                    "source_consultation_id": "6efdcd37-961b-48cf-8c0f-babf4dfe93bc",
+                    "version_id": "1f2493e4-e635-48de-b5e0-092189175a65",
+                    "status": "APPROVED",
+                    "business_type_name": "테스트",
+                },
+                "similarity_score": 0.56,
+            }
+        ],
         include_errors=[400, 500],
     ),
 )
 async def search_manuals(
+    request: Request,
     params: ManualSearchParams = Depends(),
     service: ManualService = Depends(get_manual_service),
-) -> list[ManualSearchResult]:
+) -> ResponseEnvelope[list[ManualSearchResult]]:
     """
     메뉴얼 검색 (벡터 유사도 기반)
 
@@ -795,25 +817,60 @@ async def search_manuals(
 
     **응답 (200 OK):**
     ```json
-    {
-      "success": true,
-      "data": [
         {
-          "id": "uuid-1",
-          "business_type": "인터넷뱅킹",
-          "error_code": "E001",
-          "topic": "로그인 실패",
-          "keywords": ["로그인", "인증", "실패"],
-          "background": "고객이 올바른 자격증명으로 로그인 시도 시 실패하는 현상",
-          "guidelines": [{"title": "비밀번호 초기화", "description": "..."}],
-          "status": "APPROVED",
-          "version": "v1.6",
-          "similarity_score": 0.92
+    "success": true,
+    "data": [
+        {
+        "manual": {
+            "created_at": "2025-12-19T00:54:56.876912Z",
+            "updated_at": "2025-12-19T07:17:46.249852Z",
+            "id": "de9d2d35-c4ea-4a7d-b66c-55e79471cb83",
+            "keywords": [
+            "카드",
+            "한도 초과",
+            "거래"
+            ],
+            "topic": "카드 결제 승인 시 한도 초과 메시지 발생",
+            "background": "고객 카드 한도 확인 후 일시적으로 한도 상향 안내 및 승인 재요청",
+            "guideline": "승인 재요청 후 정상 처리",
+            "business_type": "TEST",
+            "error_code": "TEST",
+            "source_consultation_id": "6efdcd37-961b-48cf-8c0f-babf4dfe93bc",
+            "version_id": "1f2493e4-e635-48de-b5e0-092189175a65",
+            "status": "APPROVED",
+            "business_type_name": "테스트"
+        },
+        "similarity_score": 0.5590785880416913
+        },
+        {
+        "manual": {
+            "created_at": "2025-12-19T08:23:46.425809Z",
+            "updated_at": "2025-12-21T10:47:14.657491Z",
+            "id": "e8ce4568-caa1-4d20-807b-9ff079d268c7",
+            "keywords": [
+            "카드",
+            "비밀번호",
+            "오류"
+            ],
+            "topic": "카드 비밀번호 오류로 결제 승인 실패",
+            "background": "비밀번호 3회 오류로 잠김 상태 확인, 본인 인증 후 비밀번호 초기화 진행, 결제 정상 처리",
+            "guideline": "비밀번호 오류 시 잠김 상태 확인 후 본인 인증 및 초기화 진행",
+            "business_type": "TEST",
+            "error_code": "TEST",
+            "source_consultation_id": "6d36e5e2-e61e-4ced-a0ac-f56aff3d78e7",
+            "version_id": "9fd68c89-7edd-4221-b7ee-dd63e2f2a5d0",
+            "status": "APPROVED",
+            "business_type_name": "테스트"
+        },
+        "similarity_score": 0.5474678795543835
         }
-      ],
-      "error": null,
-      "meta": {...},
-      "feedback": []
+    ],
+    "error": null,
+    "meta": {
+        "requestId": "6d26ba6c-544d-4973-b9b4-e87ca81b0bd9",
+        "timestamp": "2025-12-21T10:47:32.188446Z"
+    },
+    "feedback": []
     }
     ```
 
@@ -835,7 +892,13 @@ async def search_manuals(
     ```
     """
     results = await service.search_manuals(params)
-    return results
+    return ResponseEnvelope(
+        success=True,
+        data=results,
+        error=None,
+        meta=build_meta(request),
+        feedback=[],
+    )
 
 
 @router.put(

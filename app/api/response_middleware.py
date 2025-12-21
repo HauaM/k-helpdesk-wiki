@@ -41,8 +41,18 @@ class SuccessEnvelopeMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return response
 
+        headers = {
+            name: value
+            for name, value in response.headers.items()
+            if name.lower() != "content-length"
+        }
+
         if isinstance(payload, dict) and "success" in payload:
-            return response
+            return JSONResponse(
+                status_code=response.status_code,
+                content=payload,
+                headers=headers,
+            )
 
         envelope = ResponseEnvelope(
             success=True,
@@ -50,12 +60,6 @@ class SuccessEnvelopeMiddleware(BaseHTTPMiddleware):
             error=None,
             meta=build_meta(request),
         )
-
-        headers = {
-            name: value
-            for name, value in response.headers.items()
-            if name.lower() != "content-length"
-        }
 
         return JSONResponse(
             status_code=response.status_code,

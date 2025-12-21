@@ -114,7 +114,7 @@ class ManualSearchResult(BaseSchema):
     """
 
     manual: ManualEntryResponse
-    similarity_score: float
+    similarity_score: float = Field(description="유사도 점수 (0~1)", ge=0.0, le=1.0)
 
 
 class ManualVersionResponse(BaseResponseSchema):
