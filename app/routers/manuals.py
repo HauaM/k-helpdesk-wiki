@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.exceptions import (
+    AuthorizationError,
     RecordNotFoundError,
     ValidationError,
     BusinessLogicError,
@@ -1130,6 +1131,9 @@ async def delete_manual(
 async def get_manual_review_tasks(
     manual_id: UUID,
     service: ManualService = Depends(get_manual_service),
+    current_user: User = Depends(
+        require_roles(UserRole.REVIEWER, UserRole.ADMIN),
+    ),
 ) -> list[ManualReviewTaskResponse]:
     """
     메뉴얼의 검토 태스크 목록 조회
@@ -1200,7 +1204,15 @@ async def get_manual_review_tasks(
     """
 
     try:
-        return await service.get_review_tasks_by_manual_id(manual_id)
+        return await service.get_review_tasks_by_manual_id(
+            manual_id,
+            current_user=current_user,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     except RecordNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

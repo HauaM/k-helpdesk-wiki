@@ -53,7 +53,7 @@ async def get_current_user(
         )
 
     repository = UserRepository(session)
-    user = await repository.get_by_id(user_id_int)
+    user = await repository.get_with_departments(user_id_int)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

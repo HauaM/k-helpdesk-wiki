@@ -23,6 +23,7 @@ from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.services.task_service import TaskService
 from app.services.manual_service import ManualService
 from app.core.exceptions import RecordNotFoundError
+from app.models.user import UserRole
 
 
 @pytest.fixture
@@ -56,6 +57,17 @@ def mock_manual_service() -> AsyncMock:
 
 
 @pytest.fixture
+def reviewer_user() -> MagicMock:
+    """검토자 역할을 가진 사용자 객체 모킹"""
+    linker = MagicMock()
+    linker.department_id = uuid4()
+    user = MagicMock()
+    user.role = UserRole.REVIEWER
+    user.department_links = [linker]
+    return user
+
+
+@pytest.fixture
 def task_service(
     mock_session: AsyncMock,
     mock_task_repo: AsyncMock,
@@ -84,6 +96,7 @@ class TestStartReviewTask:
         mock_task_repo: AsyncMock,
         mock_manual_repo: AsyncMock,
         mock_session: AsyncMock,
+        reviewer_user: MagicMock,
     ) -> None:
         """검토 태스크 시작 - 성공"""
         # Arrange
@@ -106,6 +119,7 @@ class TestStartReviewTask:
         task.new_entry_id = new_manual.id
         task.similarity = 0.92
         task.reviewer_id = None
+        task.reviewer_department_id = reviewer_user.department_links[0].department_id
         task.review_notes = None
         task.created_at = MagicMock()
         task.updated_at = MagicMock()
@@ -117,7 +131,7 @@ class TestStartReviewTask:
         mock_task_repo.update = AsyncMock()
 
         # Act
-        result = await task_service.start_task(task_id)
+        result = await task_service.start_task(task_id, current_user=reviewer_user)
 
         # Assert
         assert result.status == TaskStatus.IN_PROGRESS
@@ -134,6 +148,7 @@ class TestStartReviewTask:
         self,
         task_service: TaskService,
         mock_task_repo: AsyncMock,
+        reviewer_user: MagicMock,
     ) -> None:
         """검토 태스크 시작 - 태스크 없음"""
         # Arrange
@@ -142,7 +157,7 @@ class TestStartReviewTask:
 
         # Act & Assert
         with pytest.raises(RecordNotFoundError):
-            await task_service.start_task(task_id)
+            await task_service.start_task(task_id, current_user=reviewer_user)
 
     @pytest.mark.asyncio
     async def test_start_task_records_history(
@@ -151,6 +166,7 @@ class TestStartReviewTask:
         mock_task_repo: AsyncMock,
         mock_manual_repo: AsyncMock,
         mock_session: AsyncMock,
+        reviewer_user: MagicMock,
     ) -> None:
         """검토 태스크 시작 - 히스토리 기록 확인"""
         # Arrange
@@ -172,6 +188,7 @@ class TestStartReviewTask:
         task.similarity = 0.85
         task.reviewer_id = None
         task.review_notes = None
+        task.reviewer_department_id = reviewer_user.department_links[0].department_id
         task.created_at = MagicMock()
         task.updated_at = MagicMock()
 
@@ -181,7 +198,7 @@ class TestStartReviewTask:
         mock_task_repo.update = AsyncMock()
 
         # Act
-        await task_service.start_task(task_id)
+        await task_service.start_task(task_id, current_user=reviewer_user)
 
         # Assert
         # session.add()가 호출되어 히스토리가 추가되어야 함
@@ -196,6 +213,7 @@ class TestStartReviewTask:
         mock_task_repo: AsyncMock,
         mock_manual_repo: AsyncMock,
         mock_session: AsyncMock,
+        reviewer_user: MagicMock,
     ) -> None:
         """검토 태스크 시작 - 상태 변경 확인"""
         # Arrange
@@ -218,6 +236,7 @@ class TestStartReviewTask:
         task.similarity = 0.85
         task.reviewer_id = None
         task.review_notes = None
+        task.reviewer_department_id = reviewer_user.department_links[0].department_id
         task.created_at = MagicMock()
         task.updated_at = MagicMock()
 
@@ -227,7 +246,10 @@ class TestStartReviewTask:
         mock_task_repo.update = AsyncMock()
 
         # Act
-        await task_service.start_task(task_id)
+        await task_service.start_task(
+            task_id,
+            current_user=reviewer_user,
+        )
 
         # Assert
         # 태스크의 상태가 변경되어야 함

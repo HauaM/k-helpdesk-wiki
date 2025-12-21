@@ -89,6 +89,11 @@ class ManualReviewTask(BaseModel):
     )
     review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer_department_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="검토 대상 부서 (FR-20 기준 노출 제어)",
+    )
 
     old_entry: Mapped[Optional["ManualEntry"]] = relationship(
         "ManualEntry",

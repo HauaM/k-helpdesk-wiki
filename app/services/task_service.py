@@ -14,8 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import RecordNotFoundError
 from app.core.logging import get_logger
+from app.core.permissions import (
+    ensure_user_can_list_tasks,
+    ensure_user_can_modify_task,
+    task_list_filter_for_user,
+)
 from app.models.manual import ManualEntry, ManualStatus
 from app.models.task import ManualReviewTask, TaskHistory, TaskStatus
+from app.models.user import User
 from app.repositories.manual_rdb import ManualEntryRDBRepository, ManualReviewTaskRepository
 from app.repositories.common_code_rdb import CommonCodeItemRepository
 from app.schemas.manual import (
@@ -53,18 +59,25 @@ class TaskService:
         *,
         status: str | None = None,
         limit: int = 100,
+        current_user: User,
     ) -> list[ManualReviewTaskResponse]:
-        tasks: Sequence[ManualReviewTask]
+        ensure_user_can_list_tasks(current_user)
+
+        status_enum: TaskStatus | None = None
         if status:
             try:
                 status_enum = TaskStatus(status)
             except ValueError:
-                status_enum = None
-            tasks = await self.task_repo.find_by_status(status_enum, limit=limit) if status_enum else []
-        else:
-            stmt = select(ManualReviewTask).order_by(ManualReviewTask.created_at.desc()).limit(limit)
-            result = await self.session.execute(stmt)
-            tasks = result.scalars().all()
+                return []
+
+        visibility_filter = task_list_filter_for_user(current_user)
+        if status_enum:
+            visibility_filter.status = status_enum
+
+        tasks = await self.task_repo.list_tasks(
+            visibility_filter,
+            limit=limit,
+        )
 
         return [await self._to_response(task) for task in tasks]
 
@@ -72,10 +85,13 @@ class TaskService:
         self,
         task_id: UUID,
         payload: ManualReviewApproval,
+        current_user: User,
     ) -> ManualReviewTaskResponse:
         task = await self.task_repo.get_by_id(task_id)
         if task is None:
             raise RecordNotFoundError(f"ManualReviewTask(id={task_id}) not found")
+
+        ensure_user_can_modify_task(current_user, task)
 
         await self._add_history(
             task,
@@ -101,11 +117,13 @@ class TaskService:
         self,
         task_id: UUID,
         payload: ManualReviewRejection,
+        current_user: User,
     ) -> ManualReviewTaskResponse:
         task = await self.task_repo.get_by_id(task_id)
         if task is None:
             raise RecordNotFoundError(f"ManualReviewTask(id={task_id}) not found")
 
+        ensure_user_can_modify_task(current_user, task)
         await self._add_history(task, TaskStatus.REJECTED, reason=payload.review_notes)
 
         task.status = TaskStatus.REJECTED
@@ -118,6 +136,7 @@ class TaskService:
     async def start_task(
         self,
         task_id: UUID,
+        current_user: User,
     ) -> ManualReviewTaskResponse:
         """검토 태스크 시작 (TODO → IN_PROGRESS)
 
@@ -137,6 +156,7 @@ class TaskService:
         if task is None:
             raise RecordNotFoundError(f"ManualReviewTask(id={task_id}) not found")
 
+        ensure_user_can_modify_task(current_user, task)
         await self._add_history(task, TaskStatus.IN_PROGRESS)
 
         task.status = TaskStatus.IN_PROGRESS
@@ -189,6 +209,7 @@ class TaskService:
             similarity=task.similarity,
             status=task.status,
             reviewer_id=task.reviewer_id,
+            reviewer_department_id=task.reviewer_department_id,
             review_notes=task.review_notes,
             old_manual_summary=self._summarize_manual(old_manual),
             new_manual_summary=self._summarize_manual(new_manual),

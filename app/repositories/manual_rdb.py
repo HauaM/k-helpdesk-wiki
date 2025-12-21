@@ -4,7 +4,7 @@ Database operations for Manual models
 """
 
 from uuid import UUID
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
 from app.models.consultation import Consultation
 from app.models.task import ManualReviewTask, TaskStatus
+from app.repositories.task_repository import TaskFilter
 from app.repositories.base import BaseRepository
 
 
@@ -418,9 +419,41 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def list_tasks(
+        self,
+        filters: TaskFilter,
+        *,
+        limit: int | None = None,
+    ) -> list[ManualReviewTask]:
+        conditions: list[Any] = []
+        if filters.status:
+            conditions.append(ManualReviewTask.status == filters.status)
+        if filters.reviewer_id:
+            conditions.append(ManualReviewTask.reviewer_id == filters.reviewer_id)
+        if filters.new_entry_id:
+            conditions.append(ManualReviewTask.new_entry_id == filters.new_entry_id)
+        if filters.old_entry_id:
+            conditions.append(ManualReviewTask.old_entry_id == filters.old_entry_id)
+        # if filters.reviewer_department_ids:
+        #     conditions.append(
+        #         ManualReviewTask.reviewer_department_id.in_(filters.reviewer_department_ids)
+        #     )
+
+        stmt = select(ManualReviewTask)
+        if conditions:
+            stmt = stmt.where(*conditions)
+        stmt = stmt.order_by(ManualReviewTask.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_by_manual_id(
         self,
         manual_id: UUID,
+        *,
+        reviewer_department_ids: list[UUID] | None = None,
     ) -> Sequence[ManualReviewTask]:
         """
         Find review tasks by new_entry_id (manual_id)
@@ -434,6 +467,10 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
         stmt = select(ManualReviewTask).where(
             ManualReviewTask.new_entry_id == manual_id,
         )
+        if reviewer_department_ids:
+            stmt = stmt.where(
+                ManualReviewTask.reviewer_department_id.in_(reviewer_department_ids)
+            )
         result = await self.session.execute(stmt)
         return result.scalars().all()
 

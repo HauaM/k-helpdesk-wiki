@@ -158,6 +158,10 @@ class ManualReviewTaskResponse(BaseResponseSchema):
     similarity: float | None
     status: TaskStatus
     reviewer_id: str | None
+    reviewer_department_id: UUID | None = Field(
+        default=None,
+        description="검토 태스크 노출 대상 부서 ID",
+    )
     review_notes: str | None
     old_manual_summary: str | None = Field(default=None, description="기존 메뉴얼 요약")
     new_manual_summary: str | None = Field(default=None, description="신규 초안 요약")

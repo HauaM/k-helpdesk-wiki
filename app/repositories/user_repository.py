@@ -47,6 +47,19 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_with_departments_by_employee_id(self, employee_id: str) -> User | None:
+        """employee_id로 해당 사용자의 부서 정보를 함께 로딩하여 조회."""
+
+        stmt = (
+            select(User)
+            .where(User.employee_id == employee_id)
+            .options(
+                selectinload(User.department_links).selectinload(UserDepartment.department),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_employee_id(self, employee_id: str) -> User | None:
         """employee_id로 사용자 단건 조회."""
 

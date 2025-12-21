@@ -22,6 +22,7 @@ class TaskFilter:
     reviewer_id: str | None = None
     new_entry_id: UUID | None = None
     old_entry_id: UUID | None = None
+    reviewer_department_ids: list[UUID] | None = None
 
 
 class TaskRepository:
@@ -70,7 +71,12 @@ class TaskRepository:
         await self.session.refresh(task)
         return task
 
-    async def list_tasks(self, filters: TaskFilter) -> list[ManualReviewTask]:
+    async def list_tasks(
+        self,
+        filters: TaskFilter,
+        *,
+        limit: int | None = None,
+    ) -> list[ManualReviewTask]:
         """필터 조건에 따른 태스크 목록 조회."""
 
         conditions = []
@@ -82,11 +88,17 @@ class TaskRepository:
             conditions.append(ManualReviewTask.new_entry_id == filters.new_entry_id)
         if filters.old_entry_id:
             conditions.append(ManualReviewTask.old_entry_id == filters.old_entry_id)
+        if filters.reviewer_department_ids:
+            conditions.append(
+                ManualReviewTask.reviewer_department_id.in_(filters.reviewer_department_ids)
+            )
 
         stmt = select(ManualReviewTask)
         if conditions:
             stmt = stmt.where(*conditions)
         stmt = stmt.order_by(ManualReviewTask.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
 
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

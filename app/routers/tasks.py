@@ -7,6 +7,7 @@ RFP Reference: Section 10 - API Design
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.exceptions import AuthorizationError
 
 from app.core.db import get_session
 from app.schemas.manual import (
@@ -64,10 +65,10 @@ def get_task_service(
     ),
 )
 async def list_review_tasks(
-    status: str | None = None,
+    status_filter: str | None = None,
     limit: int = 100,
     service: TaskService = Depends(get_task_service),
-    _current_user: User = Depends(
+    current_user: User = Depends(
         require_roles(UserRole.REVIEWER, UserRole.ADMIN),
     ),
 ) -> list[ManualReviewTaskResponse]:
@@ -131,7 +132,17 @@ async def list_review_tasks(
 
     TODO: 페이지네이션, 정렬 옵션 추가 예정
     """
-    return await service.list_review_tasks(status=status, limit=limit)
+    try:
+        return await service.list_review_tasks(
+            status=status_filter,
+            limit=limit,
+            current_user=current_user,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post(
@@ -211,7 +222,17 @@ async def approve_review_task(
     sanitized_payload = data.model_copy(
         update={"employee_id": current_user.employee_id}
     )
-    return await service.approve_task(task_id, sanitized_payload)
+    try:
+        return await service.approve_task(
+            task_id,
+            sanitized_payload,
+            current_user=current_user,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post(
@@ -232,7 +253,7 @@ async def reject_review_task(
     task_id: UUID,
     data: ManualReviewRejection,
     service: TaskService = Depends(get_task_service),
-    _current_user: User = Depends(
+    current_user: User = Depends(
         require_roles(UserRole.REVIEWER, UserRole.ADMIN),
     ),
 ) -> ManualReviewTaskResponse:
@@ -291,7 +312,17 @@ async def reject_review_task(
     - 404 Not Found: 태스크를 찾을 수 없음
     - 400 Bad Request: 태스크가 검토 중(IN_PROGRESS) 상태가 아님
     """
-    return await service.reject_task(task_id, data)
+    try:
+        return await service.reject_task(
+            task_id,
+            data,
+            current_user=current_user,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
 
 
 @router.put(
@@ -311,7 +342,7 @@ async def reject_review_task(
 async def start_review_task(
     task_id: UUID,
     service: TaskService = Depends(get_task_service),
-    _current_user: User = Depends(
+    current_user: User = Depends(
         require_roles(UserRole.REVIEWER, UserRole.ADMIN),
     ),
 ) -> ManualReviewTaskResponse:
@@ -367,4 +398,13 @@ async def start_review_task(
     - 404 Not Found: 태스크를 찾을 수 없음
     - 400 Bad Request: 태스크가 TODO 상태가 아님
     """
-    return await service.start_task(task_id)
+    try:
+        return await service.start_task(
+            task_id,
+            current_user=current_user,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc

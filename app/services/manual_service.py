@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
+    AuthorizationError,
     RecordNotFoundError,
     ValidationError,
     BusinessLogicError,
@@ -37,6 +38,7 @@ from app.llm.prompts.manual_diff import (
 from app.models.consultation import Consultation
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
 from app.models.task import ManualReviewTask, TaskStatus, ComparisonType
+from app.models.user import User, UserRole
 from app.repositories.consultation_repository import ConsultationRepository
 from app.repositories.manual_rdb import (
     ManualEntryRDBRepository,
@@ -72,6 +74,8 @@ from app.services.validation import (
 )
 from app.services.comparison_service import ComparisonService
 from app.core.config import settings
+from app.core.permissions import filter_tasks_for_user, get_user_department_ids
+from app.repositories.user_repository import UserRepository
 
 logger = get_logger(__name__)
 
@@ -119,6 +123,7 @@ class ManualService:
         consultation_repo: ConsultationRepository | None = None,
         common_code_item_repo: CommonCodeItemRepository | None = None,
         comparison_service: ComparisonService | None = None,
+        user_repo: UserRepository | None = None,
     ) -> None:
         self.session = session
         self.llm_client = llm_client
@@ -129,6 +134,7 @@ class ManualService:
         self.consultation_repo = consultation_repo or ConsultationRepository(session)
         self.common_code_item_repo = common_code_item_repo or CommonCodeItemRepository(session)
         self._comparison_service = comparison_service
+        self.user_repo = user_repo or UserRepository(session)
 
     @property
     def comparison_service(self) -> ComparisonService:
@@ -251,6 +257,7 @@ class ManualService:
         elif comparison_result.comparison_type == ComparisonType.SUPPLEMENT:
             # SUPPLEMENT 경로: 자동 병합 + 리뷰 태스크
             review_task = await self._create_review_task(
+                consultation=consultation,
                 new_entry=manual_entry,
                 old_entry=comparison_result.existing_manual,
                 comparison_type=ComparisonType.SUPPLEMENT,
@@ -286,6 +293,7 @@ class ManualService:
         else:  # ComparisonType.NEW
             # NEW 경로: 신규 draft, 리뷰 태스크 생성
             review_task = await self._create_review_task(
+                consultation=consultation,
                 new_entry=manual_entry,
                 old_entry=None,
                 comparison_type=ComparisonType.NEW,
@@ -1448,6 +1456,7 @@ class ManualService:
     async def _create_review_task(
         self,
         *,
+        consultation: Consultation,
         new_entry: ManualEntry,
         old_entry: ManualEntry | None = None,
         comparison_type: ComparisonType = ComparisonType.NEW,
@@ -1460,6 +1469,7 @@ class ManualService:
         리뷰 태스크 생성 (v2.1 확장)
 
         Args:
+            consultation: 원본 상담
             new_entry: 신규 메뉴얼 초안
             old_entry: 기존 메뉴얼 (있으면)
             comparison_type: SIMILAR/SUPPLEMENT/NEW
@@ -1467,6 +1477,8 @@ class ManualService:
             reason: 태스크 생성 사유
             auto_merged: SUPPLEMENT 경로에서 자동 병합했는지 여부
         """
+        reviewer_dept_id = await self._resolve_reviewer_department_id(consultation)
+
         task = ManualReviewTask(
             old_entry_id=old_entry.id if old_entry else None,
             new_entry_id=new_entry.id,
@@ -1475,6 +1487,7 @@ class ManualService:
             compare_version=compare_version,
             status=TaskStatus.TODO,
             decision_reason=reason,
+            reviewer_department_id=reviewer_dept_id,
         )
 
         if auto_merged and comparison_type == ComparisonType.SUPPLEMENT:
@@ -1486,6 +1499,35 @@ class ManualService:
 
         await self.review_repo.create(task)
         return task
+
+    async def _resolve_reviewer_department_id(
+        self,
+        consultation: Consultation,
+    ) -> UUID | None:
+        """
+        상담자의 소속 부서를 기반으로 검토 태스크 노출 대상을 결정한다.
+        """
+        if not consultation.employee_id:
+            return None
+
+        user = (
+            await self.user_repo.get_with_departments_by_employee_id(
+                consultation.employee_id
+            )
+        )
+        if user is None:
+            return None
+
+        primary_link = next(
+            (link for link in user.department_links if link.is_primary), None
+        )
+        if primary_link:
+            return primary_link.department_id
+
+        if user.department_links:
+            return user.department_links[0].department_id
+
+        return None
 
     async def _apply_replacement(
         self,
@@ -1671,6 +1713,7 @@ class ManualService:
     async def get_review_tasks_by_manual_id(
         self,
         manual_id: UUID,
+        current_user: User,
     ) -> list[ManualReviewTaskResponse]:
         """
         Get review tasks for a specific manual (by new_entry_id)
@@ -1684,7 +1727,21 @@ class ManualService:
             List of review task responses enriched with manual info
         """
         review_repo = ManualReviewTaskRepository(self.session)
-        tasks = await review_repo.find_by_manual_id(manual_id)
+        reviewer_department_ids: list[UUID] | None = None
+        if current_user.role != UserRole.ADMIN:
+            department_ids = get_user_department_ids(current_user)
+            reviewer_department_ids = department_ids or None
+
+        tasks = await review_repo.find_by_manual_id(
+            manual_id,
+            reviewer_department_ids=reviewer_department_ids,
+        )
+
+        visible_tasks = (
+            tasks if current_user.role == UserRole.ADMIN else filter_tasks_for_user(current_user, tasks)
+        )
+        if tasks and not visible_tasks:
+            raise AuthorizationError("해당 메뉴얼 검토 태스크를 조회할 권한이 없습니다.")
 
         # Get the manual entry model to retrieve related info
         manual_model = await self.manual_repo.get_by_id(manual_id)
@@ -1700,7 +1757,7 @@ class ManualService:
         }
 
         result = []
-        for task in tasks:
+        for task in visible_tasks:
             # Get old manual info if exists
             old_manual_summary = None
             old_business_type = None
@@ -1725,6 +1782,7 @@ class ManualService:
                 similarity=task.similarity,
                 status=task.status,
                 reviewer_id=task.reviewer_id,
+                reviewer_department_id=task.reviewer_department_id,
                 review_notes=task.review_notes,
                 old_manual_summary=old_manual_summary,
                 new_manual_summary=manual_model.background,
