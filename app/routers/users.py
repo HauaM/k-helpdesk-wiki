@@ -12,8 +12,8 @@ from app.schemas.user import (
     UserAdminCreate,
     UserAdminUpdate,
     UserListParams,
-    UserListResponse,
     UserResponse,
+    UserSearchParams,
 )
 from app.services.user_admin_service import UserAdminService
 
@@ -31,14 +31,14 @@ router = APIRouter(
 
 @router.get(
     "",
-    response_model=UserListResponse,
+    response_model=list[UserResponse],
     summary="사용자 목록 조회",
 )
 async def list_users(
     params: UserListParams = Depends(),
     service: UserAdminService = Depends(get_user_admin_service),
     _admin: User = Depends(require_roles(UserRole.ADMIN)),
-) -> UserListResponse:
+) -> list[UserResponse]:
     return await service.list_users(params)
 
 
@@ -68,3 +68,29 @@ async def update_user(
     _admin: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> UserResponse:
     return await service.update_user(user_id, payload)
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="사용자 삭제",
+)
+async def delete_user(
+    user_id: int,
+    service: UserAdminService = Depends(get_user_admin_service),
+    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+) -> None:
+    await service.delete_user(user_id)
+
+
+@router.get(
+    "/search",
+    response_model=list[UserResponse],
+    summary="사용자 검색",
+)
+async def search_users(
+    params: UserSearchParams = Depends(),
+    service: UserAdminService = Depends(get_user_admin_service),
+    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+) -> list[UserResponse]:
+    return await service.search_users(params)

@@ -4,20 +4,13 @@ User repository
 
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.department import Department, UserDepartment
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate
-
-
-SORTABLE_COLUMNS = {
-    "employee_id": User.employee_id,
-    "name": User.name,
-    "created_at": User.created_at,
-}
 
 
 class UserRepository:
@@ -42,6 +35,7 @@ class UserRepository:
             .options(
                 selectinload(User.department_links).selectinload(UserDepartment.department),
             )
+            .execution_options(populate_existing=True)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -55,6 +49,7 @@ class UserRepository:
             .options(
                 selectinload(User.department_links).selectinload(UserDepartment.department),
             )
+            .execution_options(populate_existing=True)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -88,6 +83,12 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
+    async def delete_user(self, user: User) -> None:
+        """사용자 삭제 처리."""
+
+        await self.session.delete(user)
+        await self.session.flush()
+
     async def list_users(
         self,
         *,
@@ -96,18 +97,16 @@ class UserRepository:
         role: UserRole | None = None,
         is_active: bool | None = None,
         department_code: str | None = None,
-        sort_column: str,
-        sort_order: str,
-        limit: int,
-        offset: int,
-    ) -> tuple[list[User], int]:
-        """사용자 조회(필터 + 페이징 + 정렬)."""
+    ) -> list[User]:
+        """사용자 조회(필터)."""
 
-        base_stmt = select(User).options(
-            selectinload(User.department_links).selectinload(UserDepartment.department)
+        base_stmt = (
+            select(User)
+            .options(
+                selectinload(User.department_links).selectinload(UserDepartment.department)
+            )
+            .execution_options(populate_existing=True)
         )
-        count_stmt = select(func.count(func.distinct(User.id)))
-
         filters = []
         if employee_id:
             filters.append(User.employee_id == employee_id)
@@ -124,33 +123,20 @@ class UserRepository:
                 .join(UserDepartment.department)
                 .where(Department.department_code == department_code)
             )
-            count_stmt = (
-                count_stmt.select_from(User)
-                .join(User.department_links)
+            base_stmt = (
+                base_stmt.join(User.department_links)
                 .join(UserDepartment.department)
                 .where(Department.department_code == department_code)
             )
-        else:
-            count_stmt = count_stmt.select_from(User)
 
         if filters:
             base_stmt = base_stmt.where(*filters)
-            count_stmt = count_stmt.where(*filters)
-
         base_stmt = base_stmt.distinct()
-        sort_column_obj = SORTABLE_COLUMNS.get(sort_column, User.created_at)
-        ordering = (
-            sort_column_obj.asc() if sort_order == "asc" else sort_column_obj.desc()
-        )
-        base_stmt = base_stmt.order_by(ordering).offset(offset).limit(limit)
 
         result = await self.session.execute(base_stmt)
         users = result.scalars().all()
 
-        count_result = await self.session.execute(count_stmt)
-        total = count_result.scalar_one()
-
-        return users, total
+        return users
 
     async def replace_user_departments(
         self,

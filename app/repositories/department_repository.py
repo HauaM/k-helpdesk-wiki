@@ -41,12 +41,22 @@ class DepartmentRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def list_all(self, *, is_active: bool | None = None) -> Sequence[Department]:
+    async def list_all(
+        self,
+        *,
+        is_active: bool | None = None,
+        department_code: str | None = None,
+        department_name: str | None = None,
+    ) -> Sequence[Department]:
         """모든 부서 목록 조회"""
 
         stmt = select(Department)
         if is_active is not None:
             stmt = stmt.where(Department.is_active == is_active)
+        if department_code:
+            stmt = stmt.where(Department.department_code.ilike(f"%{department_code}%"))
+        if department_name:
+            stmt = stmt.where(Department.department_name.ilike(f"%{department_name}%"))
 
         result = await self.session.execute(stmt)
         return result.scalars().all()
@@ -58,3 +68,9 @@ class DepartmentRepository:
         await self.session.flush()
         await self.session.refresh(department)
         return department
+
+    async def delete_department(self, department: Department) -> None:
+        """부서 삭제"""
+
+        await self.session.delete(department)
+        await self.session.flush()

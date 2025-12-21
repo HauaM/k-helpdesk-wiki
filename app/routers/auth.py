@@ -1,6 +1,7 @@
 """Authentication routes"""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -95,10 +96,28 @@ async def _resolve_login_payload(request: Request) -> UserLogin:
                 detail="로그인에는 OAuth2 폼 또는 JSON 본문이 필요합니다.",
             )
 
-        return UserLogin.model_validate(json_data)
+        if "employee_id" not in json_data and "username" in json_data:
+            json_data = {
+                **json_data,
+                "employee_id": json_data.get("username"),
+            }
+        try:
+            return UserLogin.model_validate(json_data)
+        except PydanticValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
 
     form_data = await request.form()
-    return UserLogin(
-        employee_id=form_data.get("employee_id"),
-        password=form_data.get("password"),
-    )
+    employee_id = form_data.get("employee_id") or form_data.get("username")
+    try:
+        return UserLogin(
+            employee_id=employee_id,
+            password=form_data.get("password"),
+        )
+    except PydanticValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors(),
+        ) from exc

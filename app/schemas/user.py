@@ -3,14 +3,13 @@ User schemas
 """
 
 from datetime import datetime
-from enum import Enum
 from typing import List
 from uuid import UUID
 
 from pydantic import Field
 
 from app.models.user import UserRole
-from app.schemas.base import BaseSchema, PaginatedResponse
+from app.schemas.base import BaseSchema
 from app.schemas.department import DepartmentResponse
 
 
@@ -45,27 +44,12 @@ class UserResponse(UserBase):
     departments: List[DepartmentResponse] = Field(default_factory=list)
 
 
-class UserSortBy(str, Enum):
-    employee_id = "employee_id"
-    name = "name"
-    created_at = "created_at"
-
-
-class SortOrder(str, Enum):
-    asc = "asc"
-    desc = "desc"
-
-
 class UserListParams(BaseSchema):
     employee_id: str | None = Field(default=None, description="사번 필터")
     name: str | None = Field(default=None, description="이름 필터 (부분 검색)")
     department_code: str | None = Field(default=None, description="부서 코드 필터")
     role: UserRole | None = Field(default=None, description="역할 필터")
     is_active: bool | None = Field(default=None, description="활성 상태 필터")
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-    sort_by: UserSortBy = Field(default=UserSortBy.created_at, description="정렬 기준")
-    sort_order: SortOrder = Field(default=SortOrder.desc, description="정렬 방향 (asc/desc)")
 
 
 class UserAdminCreate(BaseSchema):
@@ -100,8 +84,11 @@ class UserAdminUpdate(BaseSchema):
     )
 
 
-class UserListResponse(PaginatedResponse):
-    items: list[UserResponse]
+class UserSearchParams(BaseSchema):
+    name: str | None = Field(default=None, description="이름 필터 (부분 검색)")
+    employee_id: str | None = Field(default=None, description="사번 필터")
+    department_code: str | None = Field(default=None, description="부서 코드 필터")
+    is_active: bool | None = Field(default=None, description="활성 사용자만")
 
 
 class TokenResponse(BaseSchema):

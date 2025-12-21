@@ -28,8 +28,14 @@ class DepartmentService:
         self,
         *,
         is_active: bool | None = None,
+        department_code: str | None = None,
+        department_name: str | None = None,
     ) -> list[DepartmentResponse]:
-        departments = await self.department_repo.list_all(is_active=is_active)
+        departments = await self.department_repo.list_all(
+            is_active=is_active,
+            department_code=department_code,
+            department_name=department_name,
+        )
         return [DepartmentResponse.model_validate(dept) for dept in departments]
 
     async def create_department(
@@ -123,3 +129,10 @@ class DepartmentService:
             departments=departments_response,
             primary_department_id=primary_link.department_id if primary_link else None,
         )
+
+    async def delete_department(self, department_id: UUID) -> None:
+        department = await self.department_repo.get_by_id(department_id)
+        if department is None:
+            raise RecordNotFoundError(f"department_id={department_id}에 해당하는 부서가 없습니다")
+
+        await self.department_repo.delete_department(department)

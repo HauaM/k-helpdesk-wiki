@@ -14,8 +14,8 @@ from app.schemas.user import (
     UserAdminUpdate,
     UserCreate,
     UserListParams,
-    UserListResponse,
     UserResponse,
+    UserSearchParams,
 )
 from app.services.department_service import DepartmentService
 
@@ -36,30 +36,26 @@ class UserAdminService:
         self.user_repo = user_repo or UserRepository(session)
         self.department_service = department_service or DepartmentService(session)
 
-    async def list_users(self, params: UserListParams) -> UserListResponse:
-        offset = (params.page - 1) * params.page_size
-        users, total = await self.user_repo.list_users(
+    async def list_users(self, params: UserListParams) -> list[UserResponse]:
+        users = await self.user_repo.list_users(
             employee_id=params.employee_id,
             name=params.name,
             role=params.role,
             is_active=params.is_active,
             department_code=params.department_code,
-            sort_column=params.sort_by.value,
-            sort_order=params.sort_order.value,
-            limit=params.page_size,
-            offset=offset,
         )
 
-        items = [UserResponse.model_validate(user) for user in users]
+        return [UserResponse.model_validate(user) for user in users]
 
-        total_pages = (total + params.page_size - 1) // params.page_size
-        return UserListResponse(
-            items=items,
-            total=total,
-            page=params.page,
-            page_size=params.page_size,
-            total_pages=total_pages,
+    async def search_users(self, params: UserSearchParams) -> list[UserResponse]:
+        users = await self.user_repo.list_users(
+            employee_id=params.employee_id,
+            name=params.name,
+            role=None,
+            is_active=params.is_active,
+            department_code=params.department_code,
         )
+        return [UserResponse.model_validate(user) for user in users]
 
     async def create_user(self, payload: UserAdminCreate) -> UserResponse:
         await self._enforce_password_policy(payload.password)
@@ -130,6 +126,13 @@ class UserAdminService:
                 raise RecordNotFoundError(f"user_id={user.id}에 해당하는 사용자가 없습니다.")
             user = refreshed
         return UserResponse.model_validate(user)
+
+    async def delete_user(self, user_id: int) -> None:
+        user = await self.user_repo.get_by_id(user_id)
+        if user is None:
+            raise RecordNotFoundError(f"user_id={user_id}에 해당하는 사용자가 없습니다.")
+
+        await self.user_repo.delete_user(user)
 
     async def _enforce_password_policy(self, password: str) -> None:
         if len(password) < self._PASSWORD_MIN_LENGTH:

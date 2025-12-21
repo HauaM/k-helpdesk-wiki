@@ -2,8 +2,9 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from app.core.db import get_session
 from app.core.dependencies import require_roles
@@ -37,9 +38,15 @@ def get_department_service(
 )
 async def list_departments(
     is_active: Optional[bool] = Query(None, description="활성화 여부 필터"),
+    department_code: Optional[str] = Query(None, description="부서 코드 검색"),
+    department_name: Optional[str] = Query(None, description="부서 이름 검색"),
     service: DepartmentService = Depends(get_department_service),
 ) -> list[DepartmentResponse]:
-    return await service.list_departments(is_active=is_active)
+    return await service.list_departments(
+        is_active=is_active,
+        department_code=department_code,
+        department_name=department_name,
+    )
 
 
 @router.post(
@@ -89,3 +96,18 @@ async def update_user_departments(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.delete(
+    "/admin/departments/{department_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="부서 삭제",
+)
+async def delete_department(
+    department_id: UUID,
+    service: DepartmentService = Depends(get_department_service),
+) -> None:
+    try:
+        await service.delete_department(department_id)
+    except RecordNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

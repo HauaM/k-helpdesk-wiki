@@ -13,8 +13,7 @@ import sqlalchemy as sa
 # revision identifiers, used by Alembic.
 revision: str = "20251221_1200_drop_username_from_users"
 down_revision: Union[str, Sequence[str], None] = (
-    "2fe12a340c50",
-    "20251219_department_user_mapping",
+    "20251221_1210_alembic_version_len",
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
