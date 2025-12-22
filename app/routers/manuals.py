@@ -1098,7 +1098,7 @@ async def get_manual_detail(
     """
 
     repo = ManualEntryRDBRepository(service.session)
-    manual_entry = await repo.get_by_id(manual_id)
+    manual_entry = await repo.get_by_id_with_consultation(manual_id)
     if manual_entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -97,7 +97,6 @@ async def list_groups(
     page_size: int = Query(20, ge=1, le=100, description="페이지 크기"),
     is_active: Optional[bool] = Query(None, description="활성화 필터"),
     service: CommonCodeService = Depends(get_common_code_service),
-    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 그룹 목록 조회 (페이징)
@@ -207,7 +206,6 @@ async def create_item(
     group_id: UUID = Path(..., description="그룹 ID"),
     payload: CommonCodeItemCreate = ...,
     service: CommonCodeService = Depends(get_common_code_service),
-    _admin_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     """
     공통코드 항목 생성

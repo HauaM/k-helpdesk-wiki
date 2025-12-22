@@ -7,6 +7,7 @@ from uuid import UUID
 from typing import Any, Literal, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.manual import ManualEntry, ManualStatus, ManualVersion
@@ -25,6 +26,24 @@ class ManualEntryRDBRepository(BaseRepository[ManualEntry]):
 
     def __init__(self, session: AsyncSession):
         super().__init__(ManualEntry, session)
+
+    async def get_by_id_with_consultation(self, id: UUID) -> ManualEntry | None:
+        """
+        Get manual entry by ID with source consultation eagerly loaded.
+
+        Args:
+            id: ManualEntry UUID
+
+        Returns:
+            ManualEntry instance or None if not found
+        """
+        stmt = (
+            select(ManualEntry)
+            .where(ManualEntry.id == id)
+            .options(selectinload(ManualEntry.source_consultation))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def find_by_status(
         self,
