@@ -9,8 +9,9 @@ from __future__ import annotations
 from typing import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import NO_VALUE
 
 from app.core.exceptions import RecordNotFoundError
 from app.core.logging import get_logger
@@ -74,7 +75,7 @@ class TaskService:
         if status_enum:
             visibility_filter.status = status_enum
 
-        tasks = await self.task_repo.list_tasks(
+        tasks = await self.task_repo.list_tasks_with_entries(
             visibility_filter,
             limit=limit,
         )
@@ -192,8 +193,13 @@ class TaskService:
         return history
 
     async def _to_response(self, task: ManualReviewTask) -> ManualReviewTaskResponse:
-        old_manual = await self.manual_repo.get_by_id(task.old_entry_id) if task.old_entry_id else None
-        new_manual = await self.manual_repo.get_by_id(task.new_entry_id)
+        old_manual = self._get_loaded_relation(task, "old_entry")
+        if old_manual is None and task.old_entry_id:
+            old_manual = await self.manual_repo.get_by_id(task.old_entry_id)
+
+        new_manual = self._get_loaded_relation(task, "new_entry")
+        if new_manual is None:
+            new_manual = await self.manual_repo.get_by_id(task.new_entry_id)
 
         # 신규 메뉴얼 business_type 정보 조회
         new_business_type_name = await self._get_business_type_name(new_manual)
@@ -227,6 +233,12 @@ class TaskService:
             old_error_code=old_manual.error_code if old_manual else None,
             old_manual_topic=old_manual.topic if old_manual else None,
         )
+
+    def _get_loaded_relation(self, task: ManualReviewTask, attr_name: str) -> ManualEntry | None:
+        attr_state = inspect(task).attrs[attr_name]
+        if attr_state.loaded_value is NO_VALUE:
+            return None
+        return attr_state.value
 
     def _summarize_manual(self, manual: ManualEntry | None) -> str | None:
         if manual is None:

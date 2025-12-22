@@ -11,6 +11,7 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.department import (
     DepartmentCreate,
     DepartmentResponse,
+    DepartmentUpdate,
     UserDepartmentAssignment,
     UserDepartmentListResponse,
 )
@@ -56,6 +57,29 @@ class DepartmentService:
             )
         )
         return DepartmentResponse.model_validate(department)
+
+    async def update_department(
+        self,
+        department_id: UUID,
+        payload: DepartmentUpdate,
+    ) -> DepartmentResponse:
+        department = await self.department_repo.get_by_id(department_id)
+        if department is None:
+            raise RecordNotFoundError(f"department_id={department_id}에 해당하는 부서가 없습니다")
+
+        if department.department_code != payload.department_code:
+            existing = await self.department_repo.get_by_code(payload.department_code)
+            if existing:
+                raise DuplicateRecordError(
+                    f"부서코드 '{payload.department_code}'은(는) 이미 등록된 코드입니다."
+                )
+
+        department.department_code = payload.department_code
+        department.department_name = payload.department_name
+        department.is_active = payload.is_active
+
+        updated = await self.department_repo.update_department(department)
+        return DepartmentResponse.model_validate(updated)
 
     async def assign_user_departments(
         self,

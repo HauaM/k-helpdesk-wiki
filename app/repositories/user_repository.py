@@ -123,11 +123,6 @@ class UserRepository:
                 .join(UserDepartment.department)
                 .where(Department.department_code == department_code)
             )
-            base_stmt = (
-                base_stmt.join(User.department_links)
-                .join(UserDepartment.department)
-                .where(Department.department_code == department_code)
-            )
 
         if filters:
             base_stmt = base_stmt.where(*filters)

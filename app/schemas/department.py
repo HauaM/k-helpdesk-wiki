@@ -18,6 +18,10 @@ class DepartmentCreate(DepartmentBase):
     pass
 
 
+class DepartmentUpdate(DepartmentBase):
+    pass
+
+
 class DepartmentResponse(DepartmentBase, BaseResponseSchema):
     pass
 

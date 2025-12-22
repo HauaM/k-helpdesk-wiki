@@ -15,8 +15,9 @@
 - async 환경에서 **lazy-load(관계 지연 로딩)는 기본 금지**한다.
 - 관계 데이터가 필요하면 **조회 쿼리에서 eager-load를 명시**한다.
 - “DB 조회”는 **Repository**에서 끝내고, Service/Router는 **이미 로딩된 데이터로만** 로직을 수행한다.
+- 권한 체크는 **Service로 이동**하고, **Service가 조회 + eager-load + 응답 구성**까지 담당한다.
 - API 응답은 ORM 엔티티를 그대로 반환하지 말고 **DTO(Pydantic)로 변환**한다.
-- 리스트/검색은 **N+1 방지**를 위해 `selectinload`를 우선 고려한다.
+- 리스트/검색/태스크 조회는 **N+1 방지**를 위해 `selectinload`를 우선 고려한다.
 
 ---
 

@@ -13,6 +13,7 @@ from app.models.user import UserRole
 from app.schemas.department import (
     DepartmentCreate,
     DepartmentResponse,
+    DepartmentUpdate,
     UserDepartmentAssignment,
     UserDepartmentListResponse,
 )
@@ -95,6 +96,24 @@ async def update_user_departments(
     except RecordNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.put(
+    "/admin/departments/{department_id}",
+    response_model=DepartmentResponse,
+    summary="부서 정보 수정",
+)
+async def update_department(
+    department_id: UUID,
+    payload: DepartmentUpdate,
+    service: DepartmentService = Depends(get_department_service),
+) -> DepartmentResponse:
+    try:
+        return await service.update_department(department_id, payload)
+    except RecordNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except DuplicateRecordError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 

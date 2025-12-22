@@ -330,12 +330,25 @@ class ManualService:
         consultation.manual_generated_at = datetime.now(timezone.utc)
         await self.session.flush()
 
-    async def get_manual(self, manual_id: UUID) -> ManualEntryResponse:
+    def _ensure_draft_view_allowed(self, manual: ManualEntry, current_user: User) -> None:
+        if manual.status != ManualStatus.DRAFT:
+            return
+
+        if current_user.role == UserRole.ADMIN:
+            return
+
+        consultation = manual.source_consultation
+        if consultation is None or consultation.employee_id != current_user.employee_id:
+            raise AuthorizationError("초안 메뉴얼은 작성자 또는 관리자만 조회할 수 있습니다.")
+
+    async def get_manual(self, manual_id: UUID, current_user: User) -> ManualEntryResponse:
         """메뉴얼 단건 상세 조회."""
 
-        manual = await self.manual_repo.get_by_id(manual_id)
+        manual = await self.manual_repo.get_by_id_with_consultation(manual_id)
         if manual is None:
             raise RecordNotFoundError(f"ManualEntry(id={manual_id}) not found")
+
+        self._ensure_draft_view_allowed(manual, current_user)
 
         response = ManualEntryResponse.model_validate(manual)
         
@@ -852,14 +865,16 @@ class ManualService:
     async def diff_draft_with_active(
         self,
         draft_id: UUID,
+        current_user: User,
         *,
         summarize: bool = False,
     ) -> ManualVersionDiffResponse:
         """FR-14 시나리오 C: 운영 버전 vs 특정 DRAFT 세트 비교."""
 
-        draft_entry = await self.manual_repo.get_by_id(draft_id)
+        draft_entry = await self.manual_repo.get_by_id_with_consultation(draft_id)
         if draft_entry is None:
             raise RecordNotFoundError(f"Draft manual(id={draft_id}) not found")
+        self._ensure_draft_view_allowed(draft_entry, current_user)
         if draft_entry.status != ManualStatus.DRAFT:
             raise BusinessLogicError("draft_id는 DRAFT 상태 메뉴얼이어야 합니다.")
 
@@ -1732,7 +1747,7 @@ class ManualService:
             department_ids = get_user_department_ids(current_user)
             reviewer_department_ids = department_ids or None
 
-        tasks = await review_repo.find_by_manual_id(
+        tasks = await review_repo.find_by_manual_id_with_entries(
             manual_id,
             reviewer_department_ids=reviewer_department_ids,
         )
@@ -1743,8 +1758,11 @@ class ManualService:
         if tasks and not visible_tasks:
             raise AuthorizationError("해당 메뉴얼 검토 태스크를 조회할 권한이 없습니다.")
 
+        if not visible_tasks:
+            return []
+
         # Get the manual entry model to retrieve related info
-        manual_model = await self.manual_repo.get_by_id(manual_id)
+        manual_model = visible_tasks[0].new_entry or await self.manual_repo.get_by_id(manual_id)
         if manual_model is None:
             return []
 
@@ -1765,14 +1783,13 @@ class ManualService:
             old_error_code = None
             old_manual_topic = None
 
-            if task.old_entry_id:
-                old_manual = await self.manual_repo.get_by_id(task.old_entry_id)
-                if old_manual:
-                    old_manual_summary = old_manual.background
-                    old_business_type = old_manual.business_type
-                    old_business_type_name = business_type_map.get(old_business_type)
-                    old_error_code = old_manual.error_code
-                    old_manual_topic = old_manual.topic
+            old_manual = task.old_entry
+            if old_manual:
+                old_manual_summary = old_manual.background
+                old_business_type = old_manual.business_type
+                old_business_type_name = business_type_map.get(old_business_type)
+                old_error_code = old_manual.error_code
+                old_manual_topic = old_manual.topic
 
             # Build response
             response = ManualReviewTaskResponse(

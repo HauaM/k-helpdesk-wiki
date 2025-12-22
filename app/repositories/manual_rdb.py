@@ -394,6 +394,12 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
     def __init__(self, session: AsyncSession):
         super().__init__(ManualReviewTask, session)
 
+    def _with_manual_entries(self, stmt):
+        return stmt.options(
+            selectinload(ManualReviewTask.old_entry),
+            selectinload(ManualReviewTask.new_entry),
+        )
+
     async def find_by_status(
         self,
         status: TaskStatus,
@@ -468,6 +474,36 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_tasks_with_entries(
+        self,
+        filters: TaskFilter,
+        *,
+        limit: int | None = None,
+    ) -> list[ManualReviewTask]:
+        """
+        List review tasks with related manual entries eagerly loaded.
+        """
+        conditions: list[Any] = []
+        if filters.status:
+            conditions.append(ManualReviewTask.status == filters.status)
+        if filters.reviewer_id:
+            conditions.append(ManualReviewTask.reviewer_id == filters.reviewer_id)
+        if filters.new_entry_id:
+            conditions.append(ManualReviewTask.new_entry_id == filters.new_entry_id)
+        if filters.old_entry_id:
+            conditions.append(ManualReviewTask.old_entry_id == filters.old_entry_id)
+
+        stmt = select(ManualReviewTask)
+        if conditions:
+            stmt = stmt.where(*conditions)
+        stmt = stmt.order_by(ManualReviewTask.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        stmt = self._with_manual_entries(stmt)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_by_manual_id(
         self,
         manual_id: UUID,
@@ -490,6 +526,27 @@ class ManualReviewTaskRepository(BaseRepository[ManualReviewTask]):
             stmt = stmt.where(
                 ManualReviewTask.reviewer_department_id.in_(reviewer_department_ids)
             )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def find_by_manual_id_with_entries(
+        self,
+        manual_id: UUID,
+        *,
+        reviewer_department_ids: list[UUID] | None = None,
+    ) -> Sequence[ManualReviewTask]:
+        """
+        Find review tasks by new_entry_id with related manual entries eagerly loaded.
+        """
+        stmt = select(ManualReviewTask).where(
+            ManualReviewTask.new_entry_id == manual_id,
+        )
+        if reviewer_department_ids:
+            stmt = stmt.where(
+                ManualReviewTask.reviewer_department_id.in_(reviewer_department_ids)
+            )
+
+        stmt = self._with_manual_entries(stmt)
         result = await self.session.execute(stmt)
         return result.scalars().all()
 

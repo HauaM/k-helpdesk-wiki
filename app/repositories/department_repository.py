@@ -69,6 +69,13 @@ class DepartmentRepository:
         await self.session.refresh(department)
         return department
 
+    async def update_department(self, department: Department) -> Department:
+        """부서 수정"""
+
+        await self.session.flush()
+        await self.session.refresh(department)
+        return department
+
     async def delete_department(self, department: Department) -> None:
         """부서 삭제"""
 

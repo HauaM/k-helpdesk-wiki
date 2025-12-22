@@ -16,7 +16,7 @@ from app.core.exceptions import (
     BusinessLogicError,
     NeedsReReviewError,
 )
-from app.models.manual import ManualEntry, ManualStatus
+from app.models.manual import ManualStatus
 from app.models.user import User, UserRole
 from app.schemas.manual import (
     ManualApproveRequest,
@@ -38,7 +38,6 @@ from app.llm.factory import get_llm_client_instance
 from app.vectorstore.factory import get_manual_vectorstore
 from app.api.response_utils import build_meta
 from app.api.swagger_responses import combined_responses
-from app.repositories.manual_rdb import ManualEntryRDBRepository
 from app.core.dependencies import get_current_user, require_roles
 from app.schemas.response import ResponseEnvelope
 
@@ -47,23 +46,6 @@ router = APIRouter(
     tags=["manuals"],
     dependencies=[Depends(get_current_user)],
 )
-
-
-def _ensure_draft_view_allowed(manual: ManualEntry, current_user: User) -> None:
-    if manual.status != ManualStatus.DRAFT:
-        return
-
-    if current_user.role == UserRole.ADMIN:
-        return
-
-    consultation = manual.source_consultation
-    if consultation is None or consultation.employee_id != current_user.employee_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="초안 메뉴얼은 작성자 또는 관리자만 조회할 수 있습니다.",
-        )
-
-
 def get_manual_service(
     session: AsyncSession = Depends(get_session),
 ) -> ManualService:
@@ -682,23 +664,16 @@ async def diff_draft_with_active(
     - 400 Bad Request: 초안이 DRAFT 상태가 아님
     """
 
-    repo = ManualEntryRDBRepository(service.session)
-    manual_entry = await repo.get_by_id(draft_id)
-    if manual_entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ManualEntry(id={draft_id}) not found",
-        )
-
-    _ensure_draft_view_allowed(manual_entry, current_user)
-
     try:
         return await service.diff_draft_with_active(
             draft_id,
+            current_user,
             summarize=summarize,
         )
     except RecordNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except (BusinessLogicError, ValidationError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -1097,18 +1072,13 @@ async def get_manual_detail(
     - 404 Not Found: 메뉴얼을 찾을 수 없음
     """
 
-    repo = ManualEntryRDBRepository(service.session)
-    manual_entry = await repo.get_by_id_with_consultation(manual_id)
-    if manual_entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ManualEntry(id={manual_id}) not found",
-        )
-
-    _ensure_draft_view_allowed(manual_entry, current_user)
-
     try:
-        return await service.get_manual(manual_id)
+        return await service.get_manual(manual_id, current_user)
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     except RecordNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
