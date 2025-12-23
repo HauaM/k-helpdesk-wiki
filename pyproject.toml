@@ -1,0 +1,26 @@
+[project]
+name = "k-helpdesk-wiki"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13.1",
+    "anthropic>=0.18.0",
+    "asyncpg>=0.29.0",
+    "fastapi>=0.109.0",
+    "httpx>=0.26.0",
+    "mcp>=1.0.0",
+    "openai>=1.10.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pgvector>=0.2.4",
+    "psycopg2-binary>=2.9.11",
+    "pydantic>=2.5.3",
+    "pydantic-settings>=2.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.6",
+    "sentence-transformers>=5.2.0",
+    "sqlalchemy[asyncio]>=2.0.25",
+    "structlog>=24.1.0",
+    "uvicorn[standard]>=0.27.0",
+]

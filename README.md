@@ -2,54 +2,92 @@
 
 고객 상담 지식 관리 시스템 (Knowledge Helpdesk Wiki)
 
-## 📋 Overview
+## Overview
 
-KHW은 고객 상담 내역을 기반으로 메뉴얼을 자동 생성하고 관리하는 시스템입니다.
+KHW는 고객 상담 내역을 기반으로 메뉴얼을 자동 생성하고, 검토/승인/버전 관리까지 제공하는 지식 관리 시스템입니다.
 
-**주요 기능:**
-- 상담 내역 저장 및 벡터 기반 유사 상담 검색
-- LLM을 활용한 메뉴얼 자동 생성
-- 기존 메뉴얼과의 충돌 감지 및 검토 워크플로우
-- 환각(Hallucination) 방지 규칙 적용
+**주요 기능**
+- 상담 등록 및 벡터 기반 유사 상담/메뉴얼 검색
+- LLM 기반 메뉴얼 초안 생성 및 비교(diff) 지원
+- 메뉴얼 검토 태스크 및 승인 워크플로우
+- 메뉴얼 버전 관리 (APPROVED/DEPRECATED/DRAFT)
+- 공통 코드/부서/사용자 관리 및 역할 기반 접근 제어
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 app/
-├── api/           # FastAPI 앱 팩토리
-├── mcp/           # MCP 서버 (Claude 연동)
-├── core/          # 설정, DB, 로깅, 에러
-├── models/        # SQLAlchemy 모델 (RDB)
+├── api/           # FastAPI 앱 팩토리, 미들웨어, 에러 핸들러
+├── routers/       # FastAPI 라우터
+├── services/      # 비즈니스 로직 (FastAPI 독립)
+├── repositories/  # RDB/VectorStore 접근
+├── models/        # SQLAlchemy 모델
 ├── schemas/       # Pydantic 스키마 (DTO)
-├── repositories/  # DB 접근 레이어
-├── services/      # 비즈니스 로직 (MCP-ready)
-├── vectorstore/   # VectorStore 추상화
-├── llm/           # LLM 클라이언트 추상화
-├── queue/         # Retry Queue/DLQ
-└── routers/       # FastAPI 라우터
+├── vectorstore/   # VectorStore 추상화 + 구현체
+├── llm/           # LLM 클라이언트 + 프롬프트
+├── queue/         # Retry/DLQ 추상화
+├── mcp/           # MCP 서버 (Claude 연동)
+└── core/          # 설정, DB, 로깅, 보안
 ```
 
-**레이어 구조:**
-- **API Layer** (FastAPI): HTTP 요청/응답 처리
-- **Service Layer**: 비즈니스 로직 (FastAPI 독립적)
-- **Repository Layer**: 데이터 접근 (RDB + VectorStore)
-- **Model Layer**: 도메인 엔티티
+**Entrypoints**
+- API: `main.py`
+- MCP: `mcp_server.py`
 
-## 💬 Claude에서 사용하기 (MCP)
+## Quick Start
 
-KHW은 MCP(Model Context Protocol) 서버로 제공되어 Claude Desktop/웹에서 직접 사용할 수 있습니다.
+### Prerequisites
 
-### MCP 서버 시작
+- Python 3.12+
+- PostgreSQL 15+ (필수, Async SQLAlchemy 사용)
+- Redis (선택, 큐 사용 시)
+
+### Installation
 
 ```bash
-# MCP 서버 실행
+uv sync --all-groups
+```
+
+### Environment setup
+
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+### Database migration
+
+```bash
+uv run alembic current
+uv run alembic upgrade head
+or
+uv run python -m alembic current
+uv run python -m alembic upgrade head
+```
+
+### Run API
+
+```bash
+uv run python main.py
+# or
+uv run uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Run MCP server
+
+```bash
 uv run python mcp_server.py
 ```
 
-### Claude Desktop 설정
+### API Docs
 
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) 또는
-`~/.config/Claude/claude_desktop_config.json` (Linux) 파일에 추가:
+- Swagger: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- Health: http://localhost:8000/health
+
+## MCP (Claude)
+
+Claude Desktop/웹에서 MCP 서버로 접근할 수 있습니다.
 
 ```json
 {
@@ -65,185 +103,117 @@ uv run python mcp_server.py
 }
 ```
 
-**자세한 MCP 설정 방법**: [docs/MCP_SETUP.md](docs/MCP_SETUP.md)
+자세한 설정은 `docs/MCP_SETUP.md`를 참고하세요.
 
-### Claude에서 사용 예시
+## API Endpoints (대표)
 
-```
-# 상담 생성
-새 상담을 생성해주세요: "카드 결제 오류"
-
-# 유사 상담 검색
-"카드 결제"와 관련된 상담을 검색해주세요
-
-# 메뉴얼 생성
-이 상담으로 메뉴얼을 생성해주세요
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- PostgreSQL 15+ (optional, 나중에 설정)
-- Redis (optional, queue 사용 시)
-
-### Installation
-
-1. **Clone repository**
-```bash
-cd /home/hauam/workspace/k-helpdesk-wiki
-```
-
-2. **Install dependencies**
-```bash
-# Using UV (recommended)
-uv sync
-
-# Install dev dependencies as well
-uv sync --all-groups
-```
-
-3. **Environment setup**
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-4. **Run application**
-```bash
-# Using UV
-uv run python main.py
-
-# Or with uvicorn
-uv run uvicorn app.api.main:app --reload
-```
-
-5. **Access API**
-- API Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- Health Check: http://localhost:8000/health
-
-## 📡 API Endpoints
+### Auth
+- `POST /api/v1/auth/signup`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
 
 ### Consultations
-```
-POST   /api/v1/consultations              # Create consultation
-GET    /api/v1/consultations/search       # Search similar consultations
-POST   /api/v1/consultations/{id}/manual-draft  # Generate manual draft
-```
+- `POST /api/v1/consultations`
+- `GET /api/v1/consultations/search`
+- `GET /api/v1/consultations/{consultation_id}`
 
 ### Manuals
-```
-GET    /api/v1/manuals                    # List manuals
-GET    /api/v1/manuals/search             # Search manuals
-POST   /api/v1/manuals/{id}/review        # Create review task
-```
+- `POST /api/v1/manuals/draft`
+- `POST /api/v1/manuals/approve/{manual_id}`
+- `GET /api/v1/manuals`
+- `GET /api/v1/manuals/search`
+- `GET /api/v1/manuals/versions?business_type=...&error_code=...`
+- `GET /api/v1/manuals/{manual_id}`
+- `PUT /api/v1/manuals/{manual_id}`
+- `DELETE /api/v1/manuals/{manual_id}`
+- `GET /api/v1/manuals/{manual_id}/versions`
+- `GET /api/v1/manuals/{manual_id}/versions/{version}`
+- `GET /api/v1/manuals/{manual_id}/diff`
+- `GET /api/v1/manuals/{manual_id}/approved-group`
+- `GET /api/v1/manuals/{manual_id}/review-tasks`
+- `GET /api/v1/manuals/drafts/{draft_id}/diff-with-active`
 
 ### Manual Review Tasks
-```
-GET    /api/v1/manual-review/tasks                 # List review tasks
-POST   /api/v1/manual-review/tasks/{id}/approve    # Approve task
-POST   /api/v1/manual-review/tasks/{id}/reject     # Reject task
-```
+- `GET /api/v1/manual-review/tasks`
+- `POST /api/v1/manual-review/tasks/{task_id}/approve`
+- `POST /api/v1/manual-review/tasks/{task_id}/reject`
+- `PUT /api/v1/manual-review/tasks/{task_id}`
 
-## 🗄️ Database Setup
+### Admin (Users, Departments, Common Codes)
+- `GET /api/v1/users`
+- `POST /api/v1/users`
+- `PUT /api/v1/users/{user_id}`
+- `DELETE /api/v1/users/{user_id}`
+- `GET /api/v1/users/search`
+- `GET /api/v1/admin/departments`
+- `POST /api/v1/admin/departments`
+- `PUT /api/v1/admin/departments/{department_id}`
+- `DELETE /api/v1/admin/departments/{department_id}`
+- `GET/PUT /api/v1/admin/users/{user_id}/departments`
+- `GET/POST/PUT/DELETE /api/v1/admin/common-codes/groups`
+- `GET/POST/PUT/DELETE /api/v1/admin/common-codes/groups/{group_id}/items`
+- `GET /api/v1/common-codes/{group_code}`
+- `POST /api/v1/common-codes/bulk`
 
-### Using Alembic (Production)
+## Configuration
 
-```bash
-# Initialize Alembic (already done)
-uv run alembic init alembic
+주요 설정은 `.env`에서 관리합니다:
 
-# Create migration
-uv run alembic revision --autogenerate -m "Initial migration"
+- `DATABASE_URL`: Async PostgreSQL URL
+- `VECTORSTORE_TYPE`: `mock`, `pgvector`, `pinecone`, `qdrant`
+- `LLM_PROVIDER`: `mock`, `openai`, `anthropic`, `ollama`
+- `LLM_MODEL`, `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+- `E5_MODEL_NAME`, `EMBEDDING_DEVICE`
+- `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES`
 
-# Run migration
-uv run alembic upgrade head
-```
+## Development Status
 
-### Development Mode
+### Done
+- 상담 등록/검색 및 벡터 인덱싱
+- 메뉴얼 초안 생성 및 비교(diff)
+- 메뉴얼 승인/버전 관리 (APPROVED/DEPRECATED/DRAFT)
+- 메뉴얼 검토 태스크 워크플로우
+- 공통코드/부서/사용자 관리 (관리자 전용)
+- JWT 인증 및 역할 기반 접근 제어
+- pgvector/LLM(OpenAI/Anthropic/Ollama) 구현체 포함
+- 테스트: 서비스/라우터/정책 검증 케이스 추가
 
-데이터베이스는 아직 실제 연결 전입니다. 현재는 Mock 구현체로 동작합니다.
+### TODO
+- 운영 환경 배포 가이드 정리
+- 큐 브로커 기반 재시도/비동기 워커 정식 적용
+- API 문서화 정리 및 샘플 요청/응답 보강
 
-## 🔧 Configuration
-
-`.env` 파일에서 다음을 설정할 수 있습니다:
-
-### VectorStore Options
-- `mock`: 메모리 기반 (개발용)
-- `pgvector`: PostgreSQL + pgvector extension
-- `pinecone`: Pinecone 클라우드
-- `qdrant`: Qdrant 벡터 DB
-
-### LLM Provider Options
-- `mock`: Mock 응답 (개발용)
-- `openai`: OpenAI GPT models
-- `anthropic`: Anthropic Claude models
-
-## 📝 Development Status
-
-### ✅ Completed
-- [x] Project structure and configuration
-- [x] Core module (config, db, logging, exceptions)
-- [x] SQLAlchemy models (Consultation, ManualEntry, ManualVersion, ManualReviewTask)
-- [x] Pydantic schemas (request/response DTOs)
-- [x] Repository layer (RDB access)
-- [x] VectorStore abstraction + Mock implementation
-- [x] LLM client abstraction + Mock implementation
-- [x] Queue abstraction (Retry/DLQ)
-- [x] Service layer structure (business logic)
-- [x] FastAPI routers and API main
-
-### 🚧 TODO (Next Steps)
-- [ ] Implement service layer logic (consultation, manual)
-- [ ] Connect real PostgreSQL database
-- [ ] Implement real VectorStore (pgvector/Pinecone/Qdrant)
-- [ ] Implement real LLM client (OpenAI/Anthropic)
-- [ ] LLM hallucination validation logic
-- [ ] Manual conflict detection algorithm
-- [ ] Review workflow implementation
-- [ ] Unit tests
-- [ ] Integration tests
-- [ ] API documentation enhancement
-
-## 🧪 Testing
+## Testing & Lint
 
 ```bash
-# Run all tests
 uv run pytest
-
-# Run with coverage
 uv run pytest --cov=app tests/
 
-# Run specific test file
-uv run pytest tests/unit/test_consultation_service.py
+uv run black app/ tests/ --check
+uv run ruff check app/ tests/
+uv run mypy app/
 ```
 
-## 📚 Documentation
+## Documentation
 
-자세한 내용은 다음 문서를 참고하세요:
-- [RFP Document](docs/KHW_RPF.md) - 전체 요구사항 명세
-- API Documentation - http://localhost:8000/docs (서버 실행 후)
+- `docs/RFP_KHW_v6.md` (요구사항 명세)
+- `docs/MANUAL_WORKFLOW_AND_VERSIONING.md`
+- `docs/UnitSpec.md`
+- `docs/FR15_COMMON_CODE_IMPLEMENTATION.md`
 
-## 🔐 Security
+## Security
 
-- PII 데이터는 암호화/마스킹 필요 (TODO)
-- RBAC 구현 필요 (TODO)
-- API Key 관리는 환경변수로
+- JWT 기반 인증 + 역할(Role) 기반 인가
+- 비밀키/외부 API 키는 `.env`에만 저장
+- 운영 환경에서는 `SECRET_KEY` 교체 필수
 
-## 🤝 Contributing
+## Contributing
 
 1. Feature branch 생성
 2. 코드 작성 및 테스트
-3. PR 생성
+3. PR 생성 (Conventional Commits)
 
-## 📄 License
+## License
 
 Private Project
-
-## 👥 Team
-
-- Backend Architect: TBD
-- LLM Engineer: TBD
-- DevOps: TBD
