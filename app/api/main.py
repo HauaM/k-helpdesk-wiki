@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
-from app.core.db import close_db
+from app.core.db import async_session_maker, close_db
 from app.llm.embedder import get_embedding_service
+from app.services.system_bootstrap_service import SystemBootstrapService
 
 # Import routers
 from app.routers import (
@@ -57,6 +58,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.environment == "development":
         logger.info("initializing_database_tables")
         # await init_db()  # Uncomment when models are ready
+
+    if not settings.admin_id or not settings.admin_pw:
+        logger.warning("system_admin_bootstrap_skipped", reason="missing_admin_credentials")
+    else:
+        async with async_session_maker() as session:
+            bootstrap_service = SystemBootstrapService(session)
+            try:
+                await bootstrap_service.ensure_system_admin(
+                    settings.admin_id,
+                    settings.admin_pw,
+                )
+                await session.commit()
+                logger.info(
+                    "system_admin_bootstrap_complete",
+                    employee_id=settings.admin_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                await session.rollback()
+                logger.error(
+                    "system_admin_bootstrap_failed",
+                    employee_id=settings.admin_id,
+                    error=str(exc),
+                )
 
     # Schedule embedding service warmup as background task (non-blocking)
     import asyncio

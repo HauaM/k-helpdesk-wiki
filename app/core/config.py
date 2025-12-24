@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_json: bool = False  # Structured JSON logging
 
+    # Admin Bootstrap
+    admin_id: str | None = None
+    admin_pw: str | None = None
+
     @property
     def async_database_url(self) -> str:
         """Get database URL as string for SQLAlchemy"""
