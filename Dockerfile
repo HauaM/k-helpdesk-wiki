@@ -3,23 +3,22 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# uv 설치
 RUN pip install --no-cache-dir uv
 
-# 의존성 먼저 복사(캐시 최적화)
+# 1) 의존성 정의만 먼저 복사
 COPY pyproject.toml uv.lock* /app/
-
-# 운영 이미지: dev 제외 설치
 RUN uv sync --no-dev
 
-# 소스 복사
-COPY . /app
+# 2) 가상환경 
+ENV PATH="/app/.venv/bin:${PATH}"
 
-# API 기본 포트
-ENV HOST=0.0.0.0 \
-    PORT=8000
+# 3) 소스만 복사 (필요한 폴더만)
+COPY app /app/app
+COPY main.py /app/main.py
+# 필요하면 추가로:
+# COPY alembic /app/alembic
+# COPY alembic.ini /app/alembic.ini
 
+ENV HOST=0.0.0.0 PORT=8000
 EXPOSE 8000
-
-# 컨테이너 실행하면 곧바로 API 시작 (README/온보딩의 기본 실행 방식)
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
